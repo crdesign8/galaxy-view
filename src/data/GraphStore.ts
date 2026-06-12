@@ -16,6 +16,8 @@ export class GraphStore extends Component {
 
 	private includeUnresolved = false;
 	private includeOrphans = true;
+	private nodeCap: number | null = null;
+	private linkCap: number | null = null;
 	private onChanged: (() => void) | null = null;
 
 	constructor(private app: App) {
@@ -50,6 +52,14 @@ export class GraphStore extends Component {
 		return this.includeUnresolved;
 	}
 
+	/** 质量档位的节点/链接帽；变化时重建（保坐标） */
+	setCaps(nodeCap: number | null, linkCap: number | null): void {
+		if (nodeCap === this.nodeCap && linkCap === this.linkCap) return;
+		this.nodeCap = nodeCap;
+		this.linkCap = linkCap;
+		this.rebuild(true);
+	}
+
 	setIncludeOrphans(v: boolean): void {
 		if (v === this.includeOrphans) return;
 		this.includeOrphans = v;
@@ -66,6 +76,8 @@ export class GraphStore extends Component {
 		const next = buildGraph(files, this.app.metadataCache.resolvedLinks, this.app.metadataCache.unresolvedLinks, {
 			includeUnresolved: this.includeUnresolved,
 			includeOrphans: this.includeOrphans,
+			nodeCap: this.nodeCap,
+			linkCap: this.linkCap,
 		});
 
 		const oldIndexById = new Map<string, number>();

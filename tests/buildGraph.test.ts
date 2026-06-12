@@ -77,3 +77,20 @@ describe('孤儿过滤', () => {
 		expect(g.nodes[0]?.fileSize).toBe(12345);
 	});
 });
+
+describe('质量档位帽（M4）', () => {
+	it('nodeCap 按度数取 top N 并重排索引；linkCap 按 min(端点度数) 截断', () => {
+		const resolved = {
+			'01学习/笔记A.md': { '01学习/子目录/笔记B.md': 1, '02工作/笔记C.md': 1, '根笔记.md': 1 },
+			'01学习/子目录/笔记B.md': { '02工作/笔记C.md': 1 },
+		};
+		// 度数：A=3, B=2, C=2, 根=1
+		const capped = buildGraph(files, resolved, {}, { includeUnresolved: false, includeOrphans: true, nodeCap: 3 });
+		expect(capped.nodes.map((n) => n.name)).toEqual(['笔记A', '笔记B', '笔记C']);
+		expect(capped.links).toHaveLength(3); // A-根 被丢弃
+		const linkCapped = buildGraph(files, resolved, {}, { includeUnresolved: false, includeOrphans: true, linkCap: 2 });
+		expect(linkCapped.links).toHaveLength(2);
+		// 保留的是 min 度数最高的边：A-B(min2)、A-C(min2)，丢 B-C? min(B,C)=2 同分按原序——丢的是 A-根(min1)
+		expect(linkCapped.links.every((l) => l.source !== 3 && l.target !== 3)).toBe(true);
+	});
+});

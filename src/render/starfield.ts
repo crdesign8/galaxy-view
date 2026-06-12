@@ -76,11 +76,12 @@ export class Twinkler {
 	}
 }
 
-export function buildStarfield(shellRadius: number): { group: Group; twinkler: Twinkler } {
+export function buildStarfield(shellRadius: number, scale = 1): { group: Group; twinkler: Twinkler } {
 	const group = new Group();
 	const rand = mulberry(0x517cc1);
 	let twinkler: Twinkler | null = null;
-	for (const cls of CLASSES) {
+	for (const base of CLASSES) {
+		const cls = { count: Math.max(Math.round(base.count * scale), 50), size: base.size };
 		const pos = new Float32Array(cls.count * 3);
 		const col = new Float32Array(cls.count * 3);
 		for (let i = 0; i < cls.count; i++) {

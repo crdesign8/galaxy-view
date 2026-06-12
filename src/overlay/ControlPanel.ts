@@ -22,6 +22,7 @@ export interface ControlPanelCallbacks {
 	onReveal: () => void;
 	onShowOrphans: (on: boolean) => void;
 	onSizeBy: () => void;
+	onQuality: () => void;
 	onSearch: () => void;
 	onReset: () => void;
 	runScenario: (s: 'S1' | 'S2' | 'S3') => void;
@@ -40,6 +41,7 @@ export class ControlPanel {
 	private unresolvedBtn: HTMLButtonElement | null = null;
 	private orphanBtn: HTMLButtonElement | null = null;
 	private sizeByBtn: HTMLButtonElement | null = null;
+	private qualityBtn: HTMLButtonElement | null = null;
 	private styleChips: HTMLButtonElement[] = [];
 
 	constructor(
@@ -179,6 +181,13 @@ export class ControlPanel {
 			cb.onShowOrphans(s.showOrphans);
 		});
 		const advRow2 = advSec.createDiv({ cls: 'galaxy-panel-row' });
+		this.qualityBtn = advRow2.createEl('button', { text: this.qualityLabel() });
+		this.qualityBtn.addEventListener('click', () => {
+			const order: typeof s.qualityOverride[] = ['auto', 'high', 'low', 'mobile'];
+			s.qualityOverride = order[(order.indexOf(s.qualityOverride) + 1) % order.length] ?? 'auto';
+			this.qualityBtn?.setText(this.qualityLabel());
+			cb.onQuality();
+		});
 		const resetBtn = advRow2.createEl('button', { text: '重置默认' });
 		resetBtn.addEventListener('click', () => {
 			cb.onReset();
@@ -212,6 +221,11 @@ export class ControlPanel {
 		return m === 'degree' ? '大小：链接数' : m === 'fileSize' ? '大小：文档量' : '大小：一致';
 	}
 
+	private qualityLabel(): string {
+		const q = this.settings.qualityOverride;
+		return q === 'auto' ? '画质：自动' : q === 'high' ? '画质：高' : q === 'low' ? '画质：低' : '画质：移动模拟';
+	}
+
 	private markActiveChip(id: string): void {
 		for (const chip of this.styleChips) chip.toggleClass('is-active', chip.dataset['presetId'] === id);
 	}
@@ -223,6 +237,7 @@ export class ControlPanel {
 		this.unresolvedBtn?.setText(this.settings.showUnresolved ? '未解析：显示' : '未解析：隐藏');
 		this.orphanBtn?.setText(this.settings.showOrphans ? '孤儿：显示' : '孤儿：隐藏');
 		this.sizeByBtn?.setText(this.sizeByLabel());
+		this.qualityBtn?.setText(this.qualityLabel());
 	}
 
 	setPanelTheme(cls: 'gx-theme-dark' | 'gx-theme-light'): void {

@@ -3,8 +3,7 @@ import { TFile, getAllTags } from 'obsidian';
 import type { GraphData, GraphNode } from '../types';
 import type { AggregateRenderer } from '../render/AggregateRenderer';
 
-const HUB_LABEL_COUNT = 14;
-const NEIGHBOR_LABEL_MAX = 20;
+
 
 export interface OverlayCallbacks {
 	openNote: (id: string) => void;
@@ -26,6 +25,9 @@ export class OverlayManager {
 	private data: GraphData = { nodes: [], links: [] };
 	private graphRadius = 200;
 	private snippetToken = 0;
+	private hubBudget = 14;
+	private neighborBudget = 20;
+	private mobileCard = false;
 
 	constructor(
 		parent: HTMLElement,
@@ -40,6 +42,14 @@ export class OverlayManager {
 		this.card.hide();
 	}
 
+	/** 质量档位预算；卡片切底部抽屉模式（移动端） */
+	setBudgets(hub: number, neighbor: number, mobileCard: boolean): void {
+		this.hubBudget = hub;
+		this.neighborBudget = neighbor;
+		this.mobileCard = mobileCard;
+		this.setData(this.data, this.graphRadius);
+	}
+
 	setData(data: GraphData, graphRadius: number): void {
 		this.data = data;
 		this.graphRadius = graphRadius;
@@ -47,7 +57,7 @@ export class OverlayManager {
 		this.hubEls = [...data.nodes.entries()]
 			.filter(([, n]) => !n.unresolved)
 			.sort((a, b) => b[1].degree - a[1].degree)
-			.slice(0, HUB_LABEL_COUNT)
+			.slice(0, this.hubBudget)
 			.map(([index, n]) => ({
 				index,
 				el: this.root.createDiv({ cls: 'gx-label gx-label-hub', text: n.name }),
@@ -81,7 +91,7 @@ export class OverlayManager {
 		const byDegree = [...neighbors]
 			.filter((i) => i !== index)
 			.sort((a, b) => (this.data.nodes[b]?.degree ?? 0) - (this.data.nodes[a]?.degree ?? 0))
-			.slice(0, NEIGHBOR_LABEL_MAX);
+			.slice(0, this.neighborBudget);
 		this.neighborEls = byDegree.map((i) => ({
 			index: i,
 			el: this.root.createDiv({ cls: 'gx-label gx-label-neighbor', text: this.data.nodes[i]?.name ?? '' }),
@@ -162,7 +172,7 @@ export class OverlayManager {
 			const p = this.renderer.projectNode(this.hoverIndex, w, h);
 			if (!p.behind) this.hoverEl.style.transform = `translate3d(${p.x.toFixed(1)}px, ${(p.y - 18).toFixed(1)}px, 0)`;
 		}
-		if (this.cardIndex >= 0) {
+		if (this.cardIndex >= 0 && !this.mobileCard) {
 			const p = this.renderer.projectNode(this.cardIndex, w, h);
 			if (!p.behind) {
 				const flip = p.x + 296 > w;

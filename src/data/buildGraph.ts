@@ -1,5 +1,6 @@
 import type { GraphData, GraphLink, GraphNode } from '../types';
 
+
 /** 输入用纯记录，不依赖 obsidian —— 可单测（设计要求） */
 export interface FileRecord {
 	path: string;
@@ -12,6 +13,10 @@ export type LinkTable = Record<string, Record<string, number>>;
 export interface BuildOptions {
 	includeUnresolved: boolean;
 	includeOrphans: boolean;
+	/** 移动档：按度数取 top N 节点（保枢纽结构），null=不限 */
+	nodeCap?: number | null;
+	/** 移动档：按 min(端点度数) 取 top N 边，null=不限 */
+	linkCap?: number | null;
 }
 
 function topFolder(path: string): string {
@@ -101,20 +106,46 @@ export function buildGraph(
 		}
 	}
 
-	if (opts.includeOrphans) return { nodes, links };
+	let result: GraphData = { nodes, links };
+	if (!opts.includeOrphans) {
+		// 过滤孤儿（degree 0）：被过滤节点必然无边，只需重排索引
+		result = filterNodes(result, (n) => n.degree > 0);
+	}
+	const nodeCap = opts.nodeCap ?? null;
+	if (nodeCap !== null && result.nodes.length > nodeCap) {
+		// 度数榜 top N（并列按原序）——保住枢纽结构，「仍像这座库」
+		const ranked = [...result.nodes.entries()].sort((a, b) => b[1].degree - a[1].degree || a[0] - b[0]);
+		const keepIdx = new Set(ranked.slice(0, nodeCap).map(([i]) => i));
+		result = filterNodes(result, (_n, i) => keepIdx.has(i));
+	}
+	const linkCap = opts.linkCap ?? null;
+	if (linkCap !== null && result.links.length > linkCap) {
+		const deg = (i: number) => result.nodes[i]?.degree ?? 0;
+		result = {
+			nodes: result.nodes,
+			links: [...result.links.entries()]
+				.sort((a, b) => Math.min(deg(b[1].source), deg(b[1].target)) - Math.min(deg(a[1].source), deg(a[1].target)) || a[0] - b[0])
+				.slice(0, linkCap)
+				.map(([, l]) => l),
+		};
+	}
+	return result;
+}
 
-	// 过滤孤儿（degree 0）：被过滤节点必然无边，只需重排索引
+function filterNodes(g: GraphData, keep: (n: GraphNode, i: number) => boolean): GraphData {
 	const remap = new Map<number, number>();
 	const kept: GraphNode[] = [];
-	nodes.forEach((n, i) => {
-		if (n.degree > 0) {
+	g.nodes.forEach((n, i) => {
+		if (keep(n, i)) {
 			remap.set(i, kept.length);
 			kept.push(n);
 		}
 	});
-	const remapped: GraphLink[] = links.map((l) => ({
-		source: remap.get(l.source) ?? 0,
-		target: remap.get(l.target) ?? 0,
-	}));
-	return { nodes: kept, links: remapped };
+	const links: GraphLink[] = [];
+	for (const l of g.links) {
+		const s2 = remap.get(l.source);
+		const t2 = remap.get(l.target);
+		if (s2 !== undefined && t2 !== undefined) links.push({ source: s2, target: t2 });
+	}
+	return { nodes: kept, links };
 }

@@ -31,7 +31,8 @@ export interface GalaxySettings {
 	cruiseSpeed: number; // 巡航角速度倍率
 	showUnresolved: boolean;
 	showOrphans: boolean;
-	colorTheme: string; // 最近应用的配色主题 id；'imported'=二维导入，'custom'=洗牌后
+	colorTheme: string;
+	qualityOverride: 'auto' | 'high' | 'low' | 'mobile'; // mobile 档在桌面=移动模拟 // 最近应用的配色主题 id；'imported'=二维导入，'custom'=洗牌后
 	preset: VisualPreset;
 	/** 从 .obsidian/graph.json 一次性导入的 2D 配色（可在面板重新导入） */
 	colorGroups: import('./settings/graphJsonImport').ColorGroup[];
@@ -49,6 +50,7 @@ export const DEFAULT_SETTINGS: GalaxySettings = {
 	showUnresolved: false,
 	showOrphans: true,
 	colorTheme: 'imported',
+	qualityOverride: 'auto',
 	preset: 'deep-space',
 	colorGroups: [],
 	positionCache: {},
@@ -97,6 +99,11 @@ export function mergeSettings(saved: unknown): GalaxySettings {
 			typeof (sv as Record<string, unknown>)['colorTheme'] === 'string'
 				? ((sv as Record<string, unknown>)['colorTheme'] as string)
 				: d.colorTheme,
+		qualityOverride: (['auto', 'high', 'low', 'mobile'] as const).includes(
+			(sv as Record<string, unknown>)['qualityOverride'] as 'auto',
+		)
+			? ((sv as Record<string, unknown>)['qualityOverride'] as 'auto' | 'high' | 'low' | 'mobile')
+			: d.qualityOverride,
 		preset: sv.preset === 'adaptive' ? 'adaptive' : 'deep-space',
 		colorGroups: Array.isArray(sv.colorGroups)
 			? sv.colorGroups.filter(

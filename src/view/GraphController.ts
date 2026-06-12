@@ -1,5 +1,5 @@
 import type { App } from 'obsidian';
-import { Notice, debounce } from 'obsidian';
+import { Notice, Platform, debounce } from 'obsidian';
 import { Spherical, Vector3 } from 'three';
 import type { BenchResult } from '../types';
 import type { GalaxySettings } from '../settings';
@@ -19,6 +19,8 @@ import { ControlPanel } from '../overlay/ControlPanel';
 import { OverlayManager } from '../overlay/OverlayManager';
 import { NodeSearchModal } from './SearchModal';
 import { collectFrames, observeLongTasks, writeBenchResult, sleep } from '../bench/bench';
+import type { QualityTier } from '../quality/tiers';
+import { TIERS } from '../quality/tiers';
 
 const WARM_CACHE_MIN_COVERAGE = 0.8;
 const ESTABLISHING_MS = 3200;
@@ -51,6 +53,12 @@ export class GraphController {
 	private intersection: IntersectionObserver | null = null;
 	private disposeFns: (() => void)[] = [];
 	private saveSoon: () => void;
+	private tier: QualityTier = TIERS.high;
+	private watchdogTripped = false;
+	private lowFpsChecks = 0;
+	private lastWatchdogAt = 0;
+	/** WebGL 上下文丢失时由视图重建（GalaxyView 注入） */
+	onContextLost: (() => void) | null = null;
 
 	constructor(
 		private app: App,
@@ -98,8 +106,10 @@ export class GraphController {
 
 		this.applySettings();
 		this.applyPreset();
+		this.applyTier();
 		this.buildPanel();
 		this.bindPicking(renderer.renderer.domElement);
+		this.bindContextLost(renderer.renderer.domElement);
 		this.bindVisibility();
 		this.resize();
 
@@ -124,9 +134,22 @@ export class GraphController {
 				this.overlay?.update(w, h);
 			}
 			this.updateHud(now);
+			this.watchdog(now);
 			this.rafId = window.requestAnimationFrame(loop);
 		};
 		this.rafId = window.requestAnimationFrame(loop);
+	}
+
+	/** Electron GPU 重置 → 遮罩 + 一键重建（前人插件的隐性死因之一） */
+	private bindContextLost(canvas: HTMLElement): void {
+		const onLost = (e: Event) => {
+			e.preventDefault();
+			const mask = this.contentEl.createDiv({ cls: 'gx-mask' });
+			const btn = mask.createEl('button', { cls: 'gx-mask-btn', text: '渲染上下文丢失，点击重建' });
+			btn.addEventListener('click', () => this.onContextLost?.());
+		};
+		canvas.addEventListener('webglcontextlost', onLost);
+		this.disposeFns.push(() => canvas.removeEventListener('webglcontextlost', onLost));
 	}
 
 	resize(): void {
@@ -227,6 +250,47 @@ export class GraphController {
 			this.layout = new MainThreadForceLayout();
 			this.layout.init(this.store.data, this.store.positions, params, initialAlpha);
 			new Notice('星系视图：后台线程不可用，已回退主线程布局');
+		}
+	}
+
+	// ---------- 质量档位（M4） ----------
+
+	/** Platform.isMobile 硬上限；手动覆盖绝对优先；auto=high+看门狗 */
+	private pickTier(): QualityTier {
+		if (Platform.isMobile) return TIERS.mobile;
+		const o = this.settings.qualityOverride;
+		if (o === 'high' || o === 'low' || o === 'mobile') return TIERS[o];
+		return this.watchdogTripped ? TIERS.low : TIERS.high;
+	}
+
+	applyTier(): void {
+		const prev = this.tier.id;
+		this.tier = this.pickTier();
+		this.renderer?.applyTier(this.tier, this.settings.bloom.strength);
+		this.overlay?.setBudgets(this.tier.hubLabels, this.tier.neighborLabels, this.tier.id === 'mobile');
+		this.contentEl.toggleClass('gx-mobile', this.tier.id === 'mobile');
+		const total = this.app.vault.getMarkdownFiles().length;
+		this.store.setCaps(this.tier.nodeCap, this.tier.linkCap); // 变化时触发重建
+		if (this.tier.nodeCap !== null && total > this.tier.nodeCap && prev !== this.tier.id) {
+			new Notice(`移动档：已显示链接最多的前 ${this.tier.nodeCap} 个节点（共 ${total}）`);
+		}
+	}
+
+	/** 沉降后 FPS 看门狗：连续 3 次 5s 采样 <30fps → 单向降到 low（会话内不回升） */
+	private watchdog(now: number): void {
+		if (this.watchdogTripped || Platform.isMobile) return;
+		if (this.settings.qualityOverride !== 'auto' || !this.layout.isSettled() || this.benchRunning) return;
+		if (now - this.lastWatchdogAt < 5000) return;
+		this.lastWatchdogAt = now;
+		if (this.hudFrames.length > 0 && this.hudFrames.length < 30 && !this.paused) {
+			this.lowFpsChecks++;
+			if (this.lowFpsChecks >= 3) {
+				this.watchdogTripped = true;
+				this.applyTier();
+				new Notice('星系视图：已自动切换到性能模式（可在面板「高级」改回）');
+			}
+		} else {
+			this.lowFpsChecks = 0;
 		}
 	}
 
@@ -410,7 +474,8 @@ export class GraphController {
 		};
 		let hoverPending = false;
 		const onMove = (e: PointerEvent) => {
-			if (hoverPending) return;
+			const throttle = this.tier.hoverThrottleMs;
+			if (throttle === null || hoverPending) return; // 移动档：仅 tap，无 hover
 			hoverPending = true;
 			window.setTimeout(() => {
 				hoverPending = false;
@@ -420,7 +485,7 @@ export class GraphController {
 				const i = renderer.pickNearest(e.clientX - rect.left, e.clientY - rect.top, rect.width, rect.height, 10);
 				this.overlay?.setHover(i);
 				dom.style.cursor = i >= 0 ? 'pointer' : 'default';
-			}, 30);
+			}, throttle);
 		};
 		const onKey = (e: KeyboardEvent) => {
 			if (e.key === 'Escape') {
@@ -502,6 +567,12 @@ export class GraphController {
 			onStylePreset: (p) => this.applyStylePreset(p),
 			onCruiseSpeed: () => {
 				if (this.director) this.director.cruiseSpeed = this.settings.cruiseSpeed;
+				this.saveSoon();
+			},
+			onQuality: () => {
+				this.watchdogTripped = false;
+				this.lowFpsChecks = 0;
+				this.applyTier();
 				this.saveSoon();
 			},
 			onSearch: () => this.openSearch(),

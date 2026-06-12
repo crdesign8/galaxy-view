@@ -27,6 +27,7 @@ import { linkColor, fallbackColorFn } from './palette';
 import type { NodeColorFn } from './palette';
 import { buildStarfield, disposeStarfield, Twinkler } from './starfield';
 import type { VisualTokens } from './presets';
+import type { QualityTier } from '../quality/tiers';
 import { DEEP_SPACE } from './presets';
 
 const FOCUS_DIM = 0.12;
@@ -73,6 +74,9 @@ export class AggregateRenderer {
 
 	private colorFn: NodeColorFn = fallbackColorFn;
 	private tokens: VisualTokens = DEEP_SPACE;
+	private tierBloomAllowed = true;
+	private lastW = 2;
+	private lastH = 2;
 	private baseLinkOpacity = 0.16;
 	private focusActive = false;
 	private graphRadiusEstimate: number;
@@ -436,7 +440,7 @@ export class AggregateRenderer {
 		if (this.nodeMaterial) {
 			this.nodeMaterial.uniforms['uLightMode']!.value = tokens.lightMode ? 1 : 0;
 		}
-		this.bloomPass.enabled = tokens.bloomEnabled && bloomStrengthFromSettings > 0.001;
+		this.bloomPass.enabled = tokens.bloomEnabled && this.tierBloomAllowed && bloomStrengthFromSettings > 0.001;
 		if (tokens.motes && !this.motes) this.buildMotes();
 		if (this.motes) this.motes.visible = tokens.motes;
 		if (this.linkMaterial) this.linkMaterial.opacity = this.effectiveLinkOpacity();
@@ -511,7 +515,7 @@ export class AggregateRenderer {
 		this.bloomPass.strength = p.strength;
 		this.bloomPass.radius = p.radius;
 		this.bloomPass.threshold = p.threshold;
-		this.bloomPass.enabled = this.tokens.bloomEnabled && p.strength > 0.001;
+		this.bloomPass.enabled = this.tokens.bloomEnabled && this.tierBloomAllowed && p.strength > 0.001;
 	}
 
 	getBloomStrength(): number {
@@ -520,7 +524,28 @@ export class AggregateRenderer {
 
 	setBloomStrength(v: number): void {
 		this.bloomPass.strength = v;
-		this.bloomPass.enabled = this.tokens.bloomEnabled && v > 0.001;
+		this.bloomPass.enabled = this.tokens.bloomEnabled && this.tierBloomAllowed && v > 0.001;
+	}
+
+	/** 质量档位（M4）：pixelRatio / bloom 门控 / 星空密度，全部免重建即时生效 */
+	applyTier(tier: QualityTier, bloomStrengthFromSettings: number): void {
+		this.tierBloomAllowed = tier.bloomAllowed;
+		this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, tier.pixelRatioCap));
+		this.bloomPass.enabled = this.tokens.bloomEnabled && this.tierBloomAllowed && bloomStrengthFromSettings > 0.001;
+		// 星空按档位密度重建（一次性，毫秒级）
+		const visible = this.starfield.visible;
+		const rotation = this.starfield.rotation.y;
+		disposeStarfield(this.starfield);
+		this.scene.remove(this.starfield);
+		const sf = buildStarfield(this.graphRadiusEstimate * 6.5, tier.starScale);
+		this.starfield = sf.group;
+		this.twinkler = sf.twinkler;
+		this.starfield.visible = visible;
+		this.starfield.rotation.y = rotation;
+		this.scene.add(this.starfield);
+		this.resize(this.lastW, this.lastH); // pixelRatio 变化 → 重算 uPixelScale/uMaxPoint 与缓冲尺寸
+		const u = this.nodeMaterial?.uniforms['uMaxPoint'];
+		if (u) u.value = 110 * this.renderer.getPixelRatio();
 	}
 
 	setLinkOpacity(v: number): void {
@@ -536,6 +561,8 @@ export class AggregateRenderer {
 
 	resize(w: number, h: number): void {
 		if (w < 2 || h < 2) return;
+		this.lastW = w;
+		this.lastH = h;
 		this.camera.aspect = w / h;
 		this.camera.updateProjectionMatrix();
 		this.renderer.setSize(w, h);

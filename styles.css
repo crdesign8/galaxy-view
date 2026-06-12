@@ -480,3 +480,26 @@
 	color: var(--text-normal);
 	background: var(--background-primary);
 }
+
+/* ---------- M4 移动端 ---------- */
+
+.gx-mobile .gx-card {
+	left: 8px !important;
+	right: 8px;
+	top: auto !important;
+	bottom: 8px;
+	width: auto;
+	max-height: 40vh;
+	overflow-y: auto;
+	transform: none !important;
+}
+
+.gx-mask-btn {
+	font-size: 13px;
+	padding: 8px 18px;
+	border-radius: 8px;
+	background: rgba(127, 155, 255, 0.2);
+	border: 1px solid rgba(127, 155, 255, 0.5);
+	color: #e8ecf6;
+	cursor: pointer;
+}

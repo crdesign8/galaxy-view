@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-06-13 · M4 移动端：三档质量体系 + 真实 vault 安装（iPhone 实测待 Rick）
+
+### 做了什么
+- **三档质量预设**（quality/tiers.ts）：high（dpr≤2/全量/bloom 开）、low（dpr=1/星空 40%/标签 8）、mobile（dpr≤1.5/**bloom 关**——shader 热核保 80% 观感/星空 32%/**节点帽 1500**+链接帽 12k/标签 6/**仅 tap 无 hover**）。Platform.isMobile 硬上限；面板「高级→画质」可循环 自动/高/低/**移动模拟**（桌面预览移动效果）。
+- **FPS 看门狗**：auto 档沉降后连续 3 次 5s 采样 <30fps → 单向降到 low + Notice，会话内不回升（避免振荡）。
+- **节点/链接帽**进 buildGraph：度数榜 top N + min(端点度数) 截断 + 索引重排（含单测，共 8 个）；首次降档弹「已显示前 N 个节点」。
+- **移动端卡片 = 底部抽屉**（40vh 可滚动）；**webglcontextlost 恢复**：遮罩 + 一键整体重建（Electron GPU 重置 / iOS 上下文回收都走这条路）。
+- **已安装进真实 vault**（iCloud）：`.obsidian/plugins/galaxy-view/` + community-plugins.json 追加——桌面端重启 Obsidian 生效；iPhone 等 iCloud 同步完即可用。
+
+### 验证状态
+lint 0 / 8 单测绿 / 构建部署 dev vault + 真实 vault。**待 Rick**：①桌面「画质：移动模拟」预览（节点变 1500、bloom 关、点节点出底部抽屉）②iPhone 实测清单：打开不崩 → 环绕顺滑（目标 ≥25-30fps）→ tap 选中出抽屉 → 开关视图×5 → 退后台再回来正常。③不达标就按预案 isDesktopOnly 首发，移动进 V2。
+
+### 未尽事项
+- 移动端触控：OrbitControls 原生单指环绕/双指缩放平移，未额外定制；WASD/巡航速度等在手机上无意义但无害。
+- 真实 vault 桌面端需重启 Obsidian 才加载插件（community-plugins.json 不热读）。
+- 看门狗采样用 1s 帧窗（hudFrames），极端抖动场景可能误判——保守参数（3 连击）+ 手动覆盖兜底。
+
+### 文件级变更清单
+- 新增 `src/quality/tiers.ts`
+- 改 `src/data/{buildGraph,GraphStore}.ts`（caps）、`src/render/{AggregateRenderer(applyTier),starfield(scale)}.ts`、`src/view/{GraphController(pickTier/watchdog/contextlost),GalaxyView(rebuild)}.ts`、`src/overlay/{ControlPanel(画质),OverlayManager(预算/抽屉)}.ts`、`src/settings.ts`（qualityOverride）、`styles.css`、`tests/buildGraph.test.ts`
+
+---
+
 ## 2026-06-13 · M2.6 + M3：六项体验迭代 + Worker 布局正式化（冷布局主线程阻塞归零）
 
 ### 做了什么

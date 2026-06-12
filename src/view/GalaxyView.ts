@@ -51,9 +51,18 @@ export class GalaxyView extends ItemView {
 		const { clientWidth: w, clientHeight: h } = this.contentEl;
 		if (w < 10 || h < 10) return;
 		const controller = new GraphController(this.app, this.contentEl, this.host.settings, () => void this.host.saveSettings());
+		controller.onContextLost = () => this.rebuild();
 		this.controller = controller;
 		this.addChild(controller.store); // Component 生命周期：registerEvent 自动清理
 		void controller.start();
+	}
+
+	/** WebGL 上下文丢失后的整体重建 */
+	private rebuild(): void {
+		this.controller?.dispose();
+		this.controller = null;
+		this.contentEl.empty();
+		this.tryInit();
 	}
 
 	async onClose(): Promise<void> {
