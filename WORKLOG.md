@@ -4,6 +4,35 @@
 
 ---
 
+## 2026-06-13 · M2.6 + M3：六项体验迭代 + Worker 布局正式化（冷布局主线程阻塞归零）
+
+### 做了什么
+**M2.6（Rick 六条反馈）**：①六组配色主题（哈勃深空/抖音霓虹/落日胶片/赛博都市/黑客帝国/极光，按黑底呈现挑选；无颜色组的库自动按文件夹生成）+保留洗牌 ②「回中心」按钮与 R 键统一（清选中+回总览+到达即巡航——解决「不知道在绕谁转」）③亮星眨眼（仅最亮 3% 真星、同时最多一颗、泊松间隔+1.6s 包络；频率滑杆可关）④创世动画（节点从中心按半径波次绽放 2.6s，开页自动播+面板手动按钮；复用暖启动坐标，无需预计算）⑤孤儿节点开关（含边索引重排）⑥节点大小依据三模式：链接数/文档量（∛压缩长尾）/一致。
+
+**M3（性能硬化）**：WorkerForceLayout——d3-force-3d 完全离主线程（Blob URL Worker + esbuild inline-worker 插件；坐标 transferable 双缓冲乒乓，主线程每帧仅 38KB memcpy；worker 批量 tick 每批≤12ms）；创建失败回退主线程实现；LayoutEngine.ticks 正式计数器（删 bench hack）；修正 M2 起 S2 的 alpha 语义偏差（冷布局回 alpha=1）；**uMaxPoint 点精灵钳制 110dp**——实测抓到穿行星团内部 8fps 的填充率瓶颈并修复。
+
+### M3 基准（同机同库，Worker 布局）
+
+| 场景 | M0 stock | M1 聚合(主线程) | **M3 聚合+Worker** |
+|---|---|---|---|
+| S1 环绕 | 16.2 fps | 60.0 fps | **60.0 fps** (p95 17.7ms) |
+| S2 冷布局 | 61s 饱和/最长 860ms | 5.2s/最长 64ms | **5.8s/阻塞 0 次 0ms** ✅ |
+| S3 含未解析 | 13.8 fps | 60.0 fps | **60.0 fps** |
+| S4 泄漏×10 | +13.7MB | -1.0MB | **-3.7MB**（Worker 销毁干净） ✅ |
+
+布局期间编辑笔记零卡顿成为架构保证（不再只是「够快」）。G3 门通过：未解析开关可上桌面版；移动端（M4）go。
+
+### 未尽事项
+- 穿行星团时 8fps 已被钳制缓解，但极端情况（烟火预设+满屏 bloom）仍可能掉帧——M4 质量档位的 desktop-low 自动降档兜底。
+- 配色主题应用会覆盖颜色组的色值（保查询）；「导入二维配色」可随时还原。
+- 监控脚本教训：zsh 循环里裸 glob 在无匹配时直接报错退出——下次 setopt null_glob。
+
+### 文件级变更清单
+- 新增 `src/render/colorThemes.ts`、`src/layout/{forceWorker,WorkerForceLayout}.ts`、`src/typings/inline-worker.d.ts`
+- 改 `esbuild.config.mjs`（inline-worker 插件）、`src/render/{starfield(Twinkler),AggregateRenderer(reveal/sizeMode/twinkle/uMaxPoint),shaders}.ts`、`src/layout/{LayoutEngine,MainThreadForceLayout}.ts`（ticks）、`src/view/GraphController.ts`（recenter/主题/引擎选择回退/bench 修正）、`src/overlay/ControlPanel.ts`、`src/{settings,types}.ts`、`src/data/{buildGraph,GraphStore}.ts`（孤儿/fileSize）、`styles.css`、`tests/buildGraph.test.ts`（7 测试）
+
+---
+
 ## 2026-06-12 · M2.5 优化轮：风格预设（含扁平银河）+ 即时环绕 + 面板 v3 + 修 bug（Rick 六条反馈）
 
 ### 做了什么
