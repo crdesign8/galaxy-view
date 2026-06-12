@@ -1,0 +1,9 @@
+{
+	"id": "galaxy-view",
+	"name": "Galaxy View",
+	"version": "0.1.0",
+	"minAppVersion": "1.7.2",
+	"description": "Cinematic 3D graph view of your vault — fly through your notes like NASA Eyes.",
+	"author": "Rick",
+	"isDesktopOnly": false
+}

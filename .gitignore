@@ -1,0 +1,6 @@
+node_modules/
+main.js
+dist/
+dev-vault/
+.DS_Store
+*.log

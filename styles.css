@@ -1,0 +1,40 @@
+/* Galaxy View — M0 spike 样式（HUD 为开发期工具，正式视觉在 M2 落地） */
+
+.galaxy-view-content {
+	padding: 0;
+	overflow: hidden;
+	position: relative;
+}
+
+.galaxy-view-canvas {
+	position: absolute;
+	inset: 0;
+}
+
+.galaxy-hud {
+	position: absolute;
+	top: 8px;
+	left: 8px;
+	z-index: 10;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 8px 10px;
+	border-radius: 8px;
+	background: rgba(10, 14, 24, 0.72);
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	color: #e8ecf6;
+	font-family: var(--font-monospace);
+	font-size: 11px;
+}
+
+.galaxy-hud-row {
+	display: flex;
+	gap: 6px;
+}
+
+.galaxy-hud-row button {
+	font-size: 11px;
+	padding: 2px 8px;
+	cursor: pointer;
+}
