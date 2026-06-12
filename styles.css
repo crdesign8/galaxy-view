@@ -246,6 +246,7 @@
 	position: absolute;
 	top: 0;
 	left: 0;
+	z-index: 1;
 	transform: translate3d(-1000px, -1000px, 0);
 	translate: -50% -100%;
 	font-size: 11px;
@@ -274,6 +275,7 @@
 	position: absolute;
 	top: 0;
 	left: 0;
+	z-index: 6; /* 卡片永远盖住浮层标签（G2 bug 修复） */
 	width: 280px;
 	transform: translate3d(-1000px, -1000px, 0);
 	pointer-events: auto;
@@ -399,4 +401,65 @@
 	50% {
 		opacity: 0.9;
 	}
+}
+
+/* ---------- 风格预设 chips 与折叠分区（面板 v3） ---------- */
+
+.gx-chips {
+	display: flex;
+	gap: 5px;
+	margin-top: 8px;
+}
+
+.gx-chip {
+	flex: 1;
+	font-size: 11px;
+	padding: 4px 0;
+	border-radius: 12px;
+	background: rgba(127, 127, 127, 0.1);
+	border: 1px solid rgba(127, 127, 127, 0.22);
+	color: inherit;
+	cursor: pointer;
+	box-shadow: none;
+}
+
+.gx-chip:hover {
+	background: rgba(127, 155, 255, 0.18);
+}
+
+.gx-chip.is-active {
+	background: rgba(127, 155, 255, 0.25);
+	border-color: rgba(127, 155, 255, 0.6);
+}
+
+.gx-section {
+	margin-top: 8px;
+	border-top: 1px solid rgba(127, 127, 127, 0.16);
+	padding-top: 4px;
+}
+
+.gx-section > summary {
+	font-size: 11px;
+	font-weight: 600;
+	opacity: 0.6;
+	letter-spacing: 0.05em;
+	cursor: pointer;
+	list-style: none;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.gx-section > summary::before {
+	content: '▸';
+	font-size: 9px;
+	transition: transform 120ms ease;
+}
+
+.gx-section[open] > summary::before {
+	transform: rotate(90deg);
+}
+
+.gx-section-body {
+	padding-top: 2px;
 }

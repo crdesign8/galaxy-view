@@ -9,6 +9,7 @@ export interface PhysicsSettings {
 	linkDistance: number;
 	linkStrength: number; // 倍率：1 = d3 默认（1/min(端点度数)）
 	centerPull: number;
+	flatten: number; // 0=球体，>0=Y 轴压扁 → 银河盘
 }
 
 export interface LookSettings {
@@ -23,6 +24,7 @@ export interface GalaxySettings {
 	physics: PhysicsSettings;
 	look: LookSettings;
 	cruise: boolean;
+	cruiseSpeed: number; // 巡航角速度倍率
 	showUnresolved: boolean;
 	preset: VisualPreset;
 	/** 从 .obsidian/graph.json 一次性导入的 2D 配色（可在面板重新导入） */
@@ -31,12 +33,13 @@ export interface GalaxySettings {
 	positionCache: Record<string, [number, number, number]>;
 }
 
-// G1 反馈后的温和默认值：阈值抬高让内部结构可见，辉光只属于亮核与亮星
+// 默认 = 「银河」风格预设：扁平星盘 + 克制辉光——新用户第一印象优先（G2 反馈）
 export const DEFAULT_SETTINGS: GalaxySettings = {
-	bloom: { strength: 0.6, radius: 0.4, threshold: 0.18 },
-	physics: { repel: 180, linkDistance: 80, linkStrength: 1, centerPull: 0.04 },
-	look: { nodeSize: 1, linkOpacity: 0.16 },
+	bloom: { strength: 0.35, radius: 0.35, threshold: 0.22 },
+	physics: { repel: 200, linkDistance: 70, linkStrength: 1, centerPull: 0.04, flatten: 0.3 },
+	look: { nodeSize: 1, linkOpacity: 0.14 },
 	cruise: true,
+	cruiseSpeed: 1,
 	showUnresolved: false,
 	preset: 'deep-space',
 	colorGroups: [],
@@ -65,12 +68,14 @@ export function mergeSettings(saved: unknown): GalaxySettings {
 			linkDistance: num(s.physics?.['linkDistance'], d.physics.linkDistance),
 			linkStrength: num(s.physics?.['linkStrength'], d.physics.linkStrength),
 			centerPull: num(s.physics?.['centerPull'], d.physics.centerPull),
+			flatten: num(s.physics?.['flatten'], d.physics.flatten),
 		},
 		look: {
 			nodeSize: num(s.look?.['nodeSize'], d.look.nodeSize),
 			linkOpacity: num(s.look?.['linkOpacity'], d.look.linkOpacity),
 		},
 		cruise: typeof sv.cruise === 'boolean' ? sv.cruise : d.cruise,
+		cruiseSpeed: num((sv as Record<string, unknown>)['cruiseSpeed'], d.cruiseSpeed),
 		showUnresolved: typeof sv.showUnresolved === 'boolean' ? sv.showUnresolved : d.showUnresolved,
 		preset: sv.preset === 'adaptive' ? 'adaptive' : 'deep-space',
 		colorGroups: Array.isArray(sv.colorGroups)
@@ -99,6 +104,7 @@ export function toLayoutParams(p: PhysicsSettings): import('./types').LayoutPara
 		linkDistance: p.linkDistance,
 		linkStrength: p.linkStrength,
 		centerPull: p.centerPull,
+		flatten: p.flatten,
 		velocityDecay: 0.6,
 	};
 }

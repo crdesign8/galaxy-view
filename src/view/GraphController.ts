@@ -219,7 +219,39 @@ export class GraphController {
 		this.renderer?.setBloomParams(s.bloom);
 		this.renderer?.setNodeScale(s.look.nodeSize);
 		this.renderer?.setLinkOpacity(s.look.linkOpacity);
-		if (this.director) this.director.cruiseEnabled = s.cruise;
+		if (this.director) {
+			this.director.cruiseEnabled = s.cruise;
+			this.director.cruiseSpeed = s.cruiseSpeed;
+		}
+	}
+
+	/** 风格预设 = 辉光+力学+外观 成套切换 */
+	applyStylePreset(p: { bloom: typeof DEFAULT_SETTINGS.bloom; physics: typeof DEFAULT_SETTINGS.physics; look: typeof DEFAULT_SETTINGS.look }): void {
+		Object.assign(this.settings.bloom, p.bloom);
+		Object.assign(this.settings.physics, p.physics);
+		Object.assign(this.settings.look, p.look);
+		this.applySettings();
+		this.layout.updateParams(toLayoutParams(this.settings.physics));
+		this.wasSettled = false;
+		this.saveSoon();
+	}
+
+	/** 在已导入的颜色组之间洗牌（同组不变，颜色互换） */
+	shuffleColors(): void {
+		const groups = this.settings.colorGroups;
+		if (groups.length < 2) {
+			new Notice('先导入二维图谱配色，才能洗牌');
+			return;
+		}
+		const colors = groups.map((g) => g.color);
+		for (let i = colors.length - 1; i > 0; i--) {
+			const j = Math.floor(Math.random() * (i + 1));
+			[colors[i], colors[j]] = [colors[j]!, colors[i]!];
+		}
+		groups.forEach((g, i) => (g.color = colors[i] ?? g.color));
+		this.renderer?.setColorFn(makeNodeColorFn(groups));
+		this.renderer?.recolor();
+		this.saveSoon();
 	}
 
 	/** preset + app 主题 → tokens（adaptive 深色与深空共用场景） */
@@ -275,7 +307,17 @@ export class GraphController {
 		this.overlay?.setSelection(index, neighbors);
 		if (fly) {
 			const pos = renderer.nodePosition(index, new Vector3());
-			director.flyTo(pos, renderer.nodeRadius(index));
+			// 邻居质心方向：到达后环绕优先扫过链接密集的一侧
+			const density = new Vector3();
+			let count = 0;
+			const tmp = new Vector3();
+			for (const ni of neighbors) {
+				if (ni === index) continue;
+				density.add(renderer.nodePosition(ni, tmp));
+				count++;
+			}
+			const densityDir = count > 0 ? density.divideScalar(count).sub(pos) : null;
+			director.flyTo(pos, renderer.nodeRadius(index), () => director.beginFocusOrbit(densityDir));
 		}
 	}
 
@@ -387,12 +429,19 @@ export class GraphController {
 				this.saveSoon();
 			},
 			onImportColors: () => void this.importColors(true),
+			onShuffleColors: () => this.shuffleColors(),
+			onStylePreset: (p) => this.applyStylePreset(p),
+			onCruiseSpeed: () => {
+				if (this.director) this.director.cruiseSpeed = this.settings.cruiseSpeed;
+				this.saveSoon();
+			},
 			onSearch: () => this.openSearch(),
 			onReset: () => {
 				Object.assign(this.settings.bloom, DEFAULT_SETTINGS.bloom);
 				Object.assign(this.settings.physics, DEFAULT_SETTINGS.physics);
 				Object.assign(this.settings.look, DEFAULT_SETTINGS.look);
 				this.settings.cruise = DEFAULT_SETTINGS.cruise;
+				this.settings.cruiseSpeed = DEFAULT_SETTINGS.cruiseSpeed;
 				this.applySettings();
 				this.layout.updateParams(toLayoutParams(this.settings.physics));
 				this.wasSettled = false;

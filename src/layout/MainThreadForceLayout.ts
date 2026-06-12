@@ -35,7 +35,7 @@ export class MainThreadForceLayout implements LayoutEngine {
 			.force('link', forceLink<LNode>(links).distance(params.linkDistance).strength(this.linkStrengthFn(params.linkStrength)))
 			.force('charge', forceManyBody<LNode>().strength(params.charge).distanceMax(800))
 			.force('x', forceX<LNode>(0).strength(params.centerPull))
-			.force('y', forceY<LNode>(0).strength(params.centerPull))
+			.force('y', forceY<LNode>(0).strength(params.centerPull + params.flatten))
 			.force('z', forceZ<LNode>(0).strength(params.centerPull))
 			.stop();
 		this.sim.alpha(initialAlpha);
@@ -61,7 +61,7 @@ export class MainThreadForceLayout implements LayoutEngine {
 		link?.distance(params.linkDistance);
 		link?.strength(this.linkStrengthFn(params.linkStrength));
 		(sim.force('x') as import('d3-force-3d').PositionForce<LNode> | undefined)?.strength(params.centerPull);
-		(sim.force('y') as import('d3-force-3d').PositionForce<LNode> | undefined)?.strength(params.centerPull);
+		(sim.force('y') as import('d3-force-3d').PositionForce<LNode> | undefined)?.strength(params.centerPull + params.flatten);
 		(sim.force('z') as import('d3-force-3d').PositionForce<LNode> | undefined)?.strength(params.centerPull);
 		this.reheat(0.5);
 	}

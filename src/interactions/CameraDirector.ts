@@ -34,12 +34,16 @@ const FLY_KEYS = new Set(['w', 'a', 's', 'd', 'q', 'e']);
  */
 export class CameraDirector {
 	cruiseEnabled = true;
+	/** 巡航角速度倍率（面板「巡航速度」滑杆） */
+	cruiseSpeed = 1;
 
 	private controls: OrbitControls;
 	private tween: Tween | null = null;
 	private lastInputAt = 0;
 	private cruiseAnchor: Spherical | null = null;
 	private cruiseT = 0;
+	private cruiseDir = 1;
+	private pendingDensityDir: Vector3 | null = null;
 	private pressed = new Set<string>();
 	private shiftHeld = false;
 	private tmpOffset = new Vector3();
@@ -76,8 +80,10 @@ export class CameraDirector {
 	private bindPointer(): void {
 		const onDown = (e: PointerEvent) => {
 			this.dom.focus();
-			// Google Earth 式：Ctrl/⌘ + 左键拖 = 平移（右键拖原生就是平移）
-			this.controls.mouseButtons.LEFT = e.ctrlKey || e.metaKey ? MOUSE.PAN : MOUSE.ROTATE;
+			// Google Earth 式平移：⌘/Shift/Ctrl + 左键拖（macOS 的 Ctrl+点击被系统征用为右键，
+			// 所以 Mac 上主用 ⌘ 或 Shift；右键拖原生就是平移）
+			this.controls.mouseButtons.LEFT =
+				e.metaKey || e.shiftKey || e.ctrlKey ? MOUSE.PAN : MOUSE.ROTATE;
 			this.markInput();
 		};
 		const onInput = () => this.markInput();
@@ -163,6 +169,16 @@ export class CameraDirector {
 		this.startTween(this.framingPosition(graphRadius), new Vector3(0, 0, 0), 1200);
 	}
 
+	/**
+	 * 飞达节点后立即开始环绕（不等闲置 10s），且旋转方向优先扫过邻居密集的一侧
+	 * （G2 反馈：5 条链接 4 条朝南 → 先划过南方）。
+	 */
+	beginFocusOrbit(densityDir: Vector3 | null): void {
+		this.pendingDensityDir = densityDir;
+		this.cruiseAnchor = null;
+		this.lastInputAt = performance.now() - CRUISE.resumeDelayMs - 1;
+	}
+
 	flyTo(nodePos: Vector3, nodeRadius: number, onDone?: () => void): void {
 		const dist = Math.min(Math.max(nodeRadius * FLY_TO.distancePerRadius, FLY_TO.minDistance), FLY_TO.maxDistance);
 		// 保持当前视角方向但偏转 15° 方位角——到达时不正对节点，邻域可见
@@ -217,6 +233,16 @@ export class CameraDirector {
 					this.tmpOffset.copy(this.camera.position).sub(this.controls.target),
 				);
 				this.cruiseT = 0;
+				this.cruiseDir = 1;
+				// 邻居密集方向 → 选择能更早扫过该侧的旋转方向
+				if (this.pendingDensityDir && this.pendingDensityDir.lengthSq() > 1e-6) {
+					const densityTheta = new Spherical().setFromVector3(this.pendingDensityDir).theta;
+					let delta = densityTheta - this.cruiseAnchor.theta;
+					while (delta > Math.PI) delta -= 2 * Math.PI;
+					while (delta < -Math.PI) delta += 2 * Math.PI;
+					this.cruiseDir = delta >= 0 ? 1 : -1;
+				}
+				this.pendingDensityDir = null;
 			}
 			this.cruiseT += deltaS * ramp;
 			const t = this.cruiseT;
@@ -224,7 +250,7 @@ export class CameraDirector {
 			const elev = ((CRUISE.elevationDeg * Math.PI) / 180) * Math.sin((2 * Math.PI * t) / CRUISE.elevationPeriodS);
 			const breath = 1 + CRUISE.radiusBreath * Math.sin((2 * Math.PI * t) / CRUISE.radiusPeriodS);
 			this.tmpSph.radius = a.radius * breath;
-			this.tmpSph.theta = a.theta + CRUISE.angularSpeed * t;
+			this.tmpSph.theta = a.theta + this.cruiseDir * CRUISE.angularSpeed * this.cruiseSpeed * t;
 			this.tmpSph.phi = Math.min(Math.max(a.phi + elev, 0.05), Math.PI - 0.05);
 			this.camera.position.setFromSpherical(this.tmpSph).add(this.controls.target);
 			this.camera.lookAt(this.controls.target);
