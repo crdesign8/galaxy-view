@@ -14,11 +14,13 @@ export class MainThreadForceLayout implements LayoutEngine {
 
 	private sim: Simulation<LNode> | null = null;
 	private simNodes: LNode[] = [];
+	private degrees: number[] = [];
 	private settled = true;
 
 	init(data: GraphData, positions: Float32Array, params: LayoutParams): void {
 		this.dispose();
 		this.positions = positions;
+		this.degrees = data.nodes.map((n) => Math.max(n.degree, 1));
 		this.simNodes = data.nodes.map((_, i) => ({
 			x: positions[i * 3] ?? 0,
 			y: positions[i * 3 + 1] ?? 0,
@@ -30,13 +32,37 @@ export class MainThreadForceLayout implements LayoutEngine {
 		this.sim = forceSimulation(this.simNodes, 3)
 			.alphaDecay(1 - Math.pow(0.001, 1 / 300))
 			.velocityDecay(params.velocityDecay)
-			.force('link', forceLink<LNode>(links).distance(params.linkDistance))
+			.force('link', forceLink<LNode>(links).distance(params.linkDistance).strength(this.linkStrengthFn(params.linkStrength)))
 			.force('charge', forceManyBody<LNode>().strength(params.charge).distanceMax(800))
 			.force('x', forceX<LNode>(0).strength(params.centerPull))
 			.force('y', forceY<LNode>(0).strength(params.centerPull))
 			.force('z', forceZ<LNode>(0).strength(params.centerPull))
 			.stop();
 		this.settled = false;
+	}
+
+	/** d3 默认 strength = 1/min(端点连接数)，倍率叠加其上（保持枢纽不被拉爆的特性） */
+	private linkStrengthFn(mult: number): (link: SimLink<LNode>) => number {
+		const degrees = this.degrees;
+		return (link) => {
+			const s = typeof link.source === 'number' ? link.source : (link.source.index ?? 0);
+			const t = typeof link.target === 'number' ? link.target : (link.target.index ?? 0);
+			const base = 1 / Math.min(degrees[s] ?? 1, degrees[t] ?? 1);
+			return Math.min(base * mult, 1);
+		};
+	}
+
+	updateParams(params: LayoutParams): void {
+		const sim = this.sim;
+		if (!sim) return;
+		(sim.force('charge') as import('d3-force-3d').ManyBodyForce<LNode> | undefined)?.strength(params.charge);
+		const link = sim.force('link') as import('d3-force-3d').LinkForce<LNode> | undefined;
+		link?.distance(params.linkDistance);
+		link?.strength(this.linkStrengthFn(params.linkStrength));
+		(sim.force('x') as import('d3-force-3d').PositionForce<LNode> | undefined)?.strength(params.centerPull);
+		(sim.force('y') as import('d3-force-3d').PositionForce<LNode> | undefined)?.strength(params.centerPull);
+		(sim.force('z') as import('d3-force-3d').PositionForce<LNode> | undefined)?.strength(params.centerPull);
+		this.reheat(0.5);
 	}
 
 	step(): boolean {

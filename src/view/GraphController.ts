@@ -1,13 +1,15 @@
 import type { App } from 'obsidian';
-import { Notice } from 'obsidian';
+import { Notice, debounce } from 'obsidian';
 import { Spherical, Vector3 } from 'three';
 import type { BenchResult } from '../types';
-import { DEFAULT_LAYOUT_PARAMS } from '../constants';
+import type { GalaxySettings } from '../settings';
+import { DEFAULT_SETTINGS, toLayoutParams } from '../settings';
 import { GraphStore } from '../data/GraphStore';
 import { seedRadius } from '../data/seed';
 import { MainThreadForceLayout } from '../layout/MainThreadForceLayout';
 import { AggregateRenderer } from '../render/AggregateRenderer';
 import { CameraDirector } from '../interactions/CameraDirector';
+import { ControlPanel } from '../overlay/ControlPanel';
 import { collectFrames, observeLongTasks, writeBenchResult, sleep } from '../bench/bench';
 
 /**
@@ -27,16 +29,20 @@ export class GraphController {
 	private benchRunning = false;
 	private selected = -1;
 
-	private hudStatsEl: HTMLElement | null = null;
+	private panel: ControlPanel | null = null;
 	private hudFrames: number[] = [];
 	private intersection: IntersectionObserver | null = null;
 	private disposeFns: (() => void)[] = [];
+	private saveSoon: () => void;
 
 	constructor(
 		private app: App,
 		private contentEl: HTMLElement,
+		private settings: GalaxySettings,
+		saveSettings: () => void,
 	) {
 		this.store = new GraphStore(app);
+		this.saveSoon = debounce(saveSettings, 800, true);
 	}
 
 	get counts(): { nodes: number; links: number } {
@@ -53,12 +59,13 @@ export class GraphController {
 		const renderer = new AggregateRenderer(container, radius);
 		this.renderer = renderer;
 		renderer.setData(this.store.data, this.store.positions);
-		this.layout.init(this.store.data, this.store.positions, DEFAULT_LAYOUT_PARAMS);
+		this.layout.init(this.store.data, this.store.positions, toLayoutParams(this.settings.physics));
 
 		this.director = new CameraDirector(renderer.camera, renderer.renderer.domElement);
 		this.director.setInitialFraming(radius * 1.6);
 
-		this.buildHud();
+		this.applySettings();
+		this.buildPanel();
 		this.bindPicking(renderer.renderer.domElement);
 		this.bindVisibility();
 		this.resize();
@@ -87,8 +94,17 @@ export class GraphController {
 		if (!this.renderer) return;
 		this.renderer.setData(this.store.data, this.store.positions);
 		// 身份保持合并已保住旧坐标，低温重热让新节点滑入而不是全图爆炸
-		this.layout.init(this.store.data, this.store.positions, DEFAULT_LAYOUT_PARAMS);
+		this.layout.init(this.store.data, this.store.positions, toLayoutParams(this.settings.physics));
 		this.layout.reheat(0.3);
+	}
+
+	/** 设置 → 各子系统（启动与重置时） */
+	private applySettings(): void {
+		const s = this.settings;
+		this.renderer?.setBloomParams(s.bloom);
+		this.renderer?.setNodeScale(s.look.nodeSize);
+		this.renderer?.setLinkOpacity(s.look.linkOpacity);
+		if (this.director) this.director.cruiseEnabled = s.cruise;
 	}
 
 	// ---------- 拾取（屏幕空间最近邻，仅点击时 O(n)） ----------
@@ -138,44 +154,49 @@ export class GraphController {
 
 	private visible = true;
 
-	// ---------- HUD ----------
+	// ---------- 控制面板 ----------
 
-	private buildHud(): void {
-		const hud = this.contentEl.createDiv({ cls: 'galaxy-hud' });
-		this.hudStatsEl = hud.createDiv({ cls: 'galaxy-hud-stats', text: '…' });
-		const row = hud.createDiv({ cls: 'galaxy-hud-row' });
-		const mkBtn = (label: string, fn: () => void) => {
-			const b = row.createEl('button', { text: label });
-			b.addEventListener('click', fn);
-		};
-		mkBtn('S1 环绕', () => void this.runScenario('S1'));
-		mkBtn('S2 冷布局', () => void this.runScenario('S2'));
-		mkBtn('S3 含未解析', () => void this.runScenario('S3'));
-		mkBtn('巡航', () => {
-			if (this.director) this.director.cruiseEnabled = !this.director.cruiseEnabled;
-		});
-
-		const sliderRow = hud.createDiv({ cls: 'galaxy-hud-row' });
-		sliderRow.createSpan({ text: '辉光' });
-		const slider = sliderRow.createEl('input', { type: 'range' });
-		slider.min = '0';
-		slider.max = '2.5';
-		slider.step = '0.05';
-		slider.value = String(this.renderer?.getBloomStrength() ?? 0.9);
-		slider.addEventListener('input', () => {
-			this.renderer?.setBloomStrength(Number(slider.value));
+	private buildPanel(): void {
+		this.panel = new ControlPanel(this.contentEl, this.settings, {
+			onBloom: () => {
+				this.renderer?.setBloomParams(this.settings.bloom);
+				this.saveSoon();
+			},
+			onPhysics: () => {
+				this.layout.updateParams(toLayoutParams(this.settings.physics));
+				this.saveSoon();
+			},
+			onLook: () => {
+				this.renderer?.setNodeScale(this.settings.look.nodeSize);
+				this.renderer?.setLinkOpacity(this.settings.look.linkOpacity);
+				this.saveSoon();
+			},
+			onCruise: (on) => {
+				if (this.director) this.director.cruiseEnabled = on;
+				this.saveSoon();
+			},
+			onReset: () => {
+				Object.assign(this.settings.bloom, DEFAULT_SETTINGS.bloom);
+				Object.assign(this.settings.physics, DEFAULT_SETTINGS.physics);
+				Object.assign(this.settings.look, DEFAULT_SETTINGS.look);
+				this.settings.cruise = DEFAULT_SETTINGS.cruise;
+				this.applySettings();
+				this.layout.updateParams(toLayoutParams(this.settings.physics));
+				this.saveSoon();
+			},
+			runScenario: (s) => void this.runScenario(s),
 		});
 	}
 
 	private updateHud(now: number): void {
 		this.hudFrames.push(now);
 		while (this.hudFrames.length > 0 && now - (this.hudFrames[0] ?? 0) > 1000) this.hudFrames.shift();
-		const el = this.hudStatsEl;
+		const el = this.panel?.statsEl;
 		if (!el || now % 500 > 250) return;
 		const c = this.counts;
 		el.setText(
 			`${this.hudFrames.length} fps · ${this.renderer?.drawCalls ?? 0} calls · ${c.nodes}n/${c.links}l · ` +
-				`${this.layout.isSettled() ? '已沉降' : '布局中'}${this.selected >= 0 ? ` · #${this.selected}` : ''}`,
+				`${this.layout.isSettled() ? '已沉降' : '布局中'}`,
 		);
 	}
 
@@ -300,6 +321,7 @@ export class GraphController {
 		this.layout.dispose();
 		this.renderer?.dispose();
 		this.renderer = null;
-		this.hudStatsEl = null;
+		this.panel?.dispose();
+		this.panel = null;
 	}
 }

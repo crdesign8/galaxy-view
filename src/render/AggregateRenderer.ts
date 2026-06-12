@@ -58,6 +58,7 @@ export class AggregateRenderer {
 	private sizes: Float32Array = new Float32Array(0);
 
 	private projVec = new Vector3();
+	private pixelScale = 1;
 
 	constructor(container: HTMLElement, graphRadiusEstimate: number) {
 		this.renderer = new WebGLRenderer({ antialias: false, alpha: false });
@@ -122,7 +123,7 @@ export class AggregateRenderer {
 			vertexColors: true,
 			transparent: true,
 			depthWrite: false,
-			uniforms: { uPixelScale: { value: 1 } },
+			uniforms: { uPixelScale: { value: this.pixelScale }, uSizeMul: { value: this.nodeScale } },
 		});
 		this.nodePoints = new Points(this.nodeGeometry, this.nodeMaterial);
 		this.nodePoints.renderOrder = 1; // 节点永远盖住链接网
@@ -212,6 +213,25 @@ export class AggregateRenderer {
 		return this.bloomPass.enabled ? this.bloomPass.strength : 0;
 	}
 
+	setBloomParams(p: { strength: number; radius: number; threshold: number }): void {
+		this.bloomPass.strength = p.strength;
+		this.bloomPass.radius = p.radius;
+		this.bloomPass.threshold = p.threshold;
+		this.bloomPass.enabled = p.strength > 0.001;
+	}
+
+	setLinkOpacity(v: number): void {
+		if (this.linkMaterial) this.linkMaterial.opacity = v;
+	}
+
+	private nodeScale = 1;
+
+	setNodeScale(v: number): void {
+		this.nodeScale = v;
+		const u = this.nodeMaterial?.uniforms['uSizeMul'];
+		if (u) u.value = v;
+	}
+
 	resize(w: number, h: number): void {
 		if (w < 2 || h < 2) return;
 		this.camera.aspect = w / h;
@@ -220,8 +240,9 @@ export class AggregateRenderer {
 		this.composer.setSize(w, h);
 		this.bloomPass.resolution.set(w, h);
 		const physH = h * this.renderer.getPixelRatio();
-		const scale = physH / (2 * Math.tan(((this.camera.fov / 2) * Math.PI) / 180));
-		if (this.nodeMaterial) this.nodeMaterial.uniforms['uPixelScale']!.value = scale;
+		this.pixelScale = physH / (2 * Math.tan(((this.camera.fov / 2) * Math.PI) / 180));
+		const u = this.nodeMaterial?.uniforms['uPixelScale'];
+		if (u) u.value = this.pixelScale;
 	}
 
 	/** 投影到屏幕逻辑像素；z>1 = 在镜头后 */

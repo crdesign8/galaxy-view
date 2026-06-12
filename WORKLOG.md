@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-06-12 · M1.5 控制面板：响应 G1 反馈（辉光过曝 + 可玩性不足）
+
+### 做了什么
+Rick 看过 M1 后给出两条反馈：辉光太耀眼看不清内部结构；控制器太弱想要力学参数可玩。落地：左上角暗玻璃**控制面板**——辉光（强度/扩散/阈值）、力学（斥力/链接距离/链接强度/向心力，拖动时布局实时重热、星系当场重排）、外观（节点大小/链接透明度）、巡航开关、重置默认；**全部参数持久化**到插件 data.json（防抖 800ms 写盘），重启不丢。基准按钮收进折叠的「基准（开发）」区。默认辉光调温和：strength 0.9→0.6、radius 0.45→0.4、threshold 0.1→**0.18**（阈值是解决「看不清结构」的关键——只有亮核与亮星过线发光，内部链接网不再被淹没）。
+
+### 关键决策
+- 链接强度做成 d3 默认值（1/min(端点度数)）之上的**倍率**而非绝对值——保留「枢纽不被拉爆」的自适应特性，滑杆语义仍直观。
+- 力学滑杆 input 即 updateParams + reheat(0.5)：重排过程本身是可玩性（拖斥力看星系呼吸）。
+- 设置经 SettingsHost 接口注入视图，避免 main.ts 循环依赖；mergeSettings 对脏数据逐字段防御。
+
+### 当前状态
+lint/build/单测全绿，已部署 dev vault。**视觉验证被锁屏打断**——Rick 解锁后验证路径：打开星系视图 → 左上面板拖「阈值」滑杆右移看结构浮现 → 拖「斥力」看星系实时重排 → 关闭重开 Obsidian 确认参数保持。
+
+### 未尽事项
+- 面板视觉是草案（暗玻璃方向 A 风格），Rick 看过后再定稿；浅色主题适配在 M2 双方向里一并做。
+- bench S2 场景在面板调参后会用当前力学参数（不再是固定默认）——跑对比基准前先「重置默认」。
+
+### 文件级变更清单
+- 新增 `src/settings.ts`（GalaxySettings/默认值/merge/SettingsHost）、`src/overlay/ControlPanel.ts`
+- 改 `src/{main,types,constants}.ts`、`src/view/{GalaxyView,GraphController}.ts`、`src/layout/{LayoutEngine,MainThreadForceLayout}.ts`（updateParams + linkStrength 倍率）、`src/render/{AggregateRenderer,shaders}.ts`（setBloomParams/setLinkOpacity/uSizeMul）、`styles.css`（面板样式替换旧 HUD）
+
+---
+
 ## 2026-06-12 · M1 聚合渲染器落地：16fps → 60fps（vsync 顶满），G0 红色问题全部清除
 
 ### 做了什么

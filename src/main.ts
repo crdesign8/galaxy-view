@@ -1,11 +1,16 @@
 import { Notice, Plugin } from 'obsidian';
 import { VIEW_TYPE_GALAXY } from './constants';
+import type { GalaxySettings } from './settings';
+import { DEFAULT_SETTINGS, mergeSettings } from './settings';
 import { GalaxyView } from './view/GalaxyView';
 import { heapUsed, sleep, writeBenchResult } from './bench/bench';
 
 export default class GalaxyViewPlugin extends Plugin {
+	settings: GalaxySettings = DEFAULT_SETTINGS;
+
 	async onload(): Promise<void> {
-		this.registerView(VIEW_TYPE_GALAXY, (leaf) => new GalaxyView(leaf));
+		this.settings = mergeSettings(await this.loadData());
+		this.registerView(VIEW_TYPE_GALAXY, (leaf) => new GalaxyView(leaf, this));
 
 		this.addRibbonIcon('orbit', '打开星系视图', () => {
 			void this.activateView();
@@ -30,6 +35,10 @@ export default class GalaxyViewPlugin extends Plugin {
 			name: 'M0 基准：S4 泄漏金丝雀（开关视图×10）',
 			callback: () => void this.runLeakCanary(),
 		});
+	}
+
+	async saveSettings(): Promise<void> {
+		await this.saveData(this.settings);
 	}
 
 	async activateView(): Promise<GalaxyView | null> {
@@ -80,6 +89,7 @@ export default class GalaxyViewPlugin extends Plugin {
 		}
 		// 布局 tick 产生大量短命垃圾（d3 每 tick 重建八叉树），忙循环期间 major GC
 		// 不一定跑——等空闲 GC 收尾后再读数，否则把 GC 滞后误判成泄漏（2026-06-12 实测）
+		// eslint-disable-next-line obsidianmd/ui/sentence-case -- GC 是专有缩写，开发期提示
 		new Notice('S4：等待 20s 让 GC 收尾…');
 		await sleep(20_000);
 		const after = heapUsed();

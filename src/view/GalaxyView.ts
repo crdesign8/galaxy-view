@@ -1,12 +1,16 @@
 import { ItemView, WorkspaceLeaf } from 'obsidian';
 import { VIEW_TYPE_GALAXY } from '../constants';
+import type { SettingsHost } from '../settings';
 import { GraphController } from './GraphController';
 
 export class GalaxyView extends ItemView {
 	navigation = true;
 	controller: GraphController | null = null;
 
-	constructor(leaf: WorkspaceLeaf) {
+	constructor(
+		leaf: WorkspaceLeaf,
+		private host: SettingsHost,
+	) {
 		super(leaf);
 	}
 
@@ -45,7 +49,7 @@ export class GalaxyView extends ItemView {
 		if (this.controller) return;
 		const { clientWidth: w, clientHeight: h } = this.contentEl;
 		if (w < 10 || h < 10) return;
-		const controller = new GraphController(this.app, this.contentEl);
+		const controller = new GraphController(this.app, this.contentEl, this.host.settings, () => void this.host.saveSettings());
 		this.controller = controller;
 		this.addChild(controller.store); // Component 生命周期：registerEvent 自动清理
 		void controller.start();

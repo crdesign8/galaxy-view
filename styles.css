@@ -1,4 +1,4 @@
-/* Galaxy View — M0 spike 样式（HUD 为开发期工具，正式视觉在 M2 落地） */
+/* Galaxy View — 视图与控制面板（深空暗玻璃，方向 A 风格基线） */
 
 .galaxy-view-content {
 	padding: 0;
@@ -11,30 +11,130 @@
 	inset: 0;
 }
 
-.galaxy-hud {
+.galaxy-panel {
 	position: absolute;
-	top: 8px;
-	left: 8px;
+	top: 10px;
+	left: 10px;
 	z-index: 10;
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	padding: 8px 10px;
-	border-radius: 8px;
-	background: rgba(10, 14, 24, 0.72);
+	width: 248px;
+	border-radius: 10px;
+	background: rgba(10, 14, 24, 0.74);
+	backdrop-filter: blur(16px);
 	border: 1px solid rgba(255, 255, 255, 0.08);
 	color: #e8ecf6;
+	font-size: 12px;
+	user-select: none;
+}
+
+.galaxy-panel-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 8px 10px;
+}
+
+.galaxy-panel-stats {
 	font-family: var(--font-monospace);
 	font-size: 11px;
+	color: #aeb8d0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
-.galaxy-hud-row {
+.galaxy-panel-collapse {
+	flex-shrink: 0;
+	width: 22px;
+	height: 22px;
+	padding: 0;
+	line-height: 1;
+	background: transparent;
+	border: 1px solid rgba(255, 255, 255, 0.14);
+	color: #e8ecf6;
+	border-radius: 6px;
+	cursor: pointer;
+	box-shadow: none;
+}
+
+.galaxy-panel-body {
+	padding: 0 10px 10px;
+}
+
+.galaxy-panel-body.is-hidden {
+	display: none;
+}
+
+.galaxy-panel-section {
+	margin-top: 6px;
+}
+
+.galaxy-panel-section-title {
+	font-size: 11px;
+	font-weight: 600;
+	color: #8e99b3;
+	letter-spacing: 0.05em;
+	margin: 6px 0 2px;
+}
+
+.galaxy-panel-slider {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 3px 0;
+}
+
+.galaxy-panel-label {
+	flex: 0 0 64px;
+	color: #c6cede;
+}
+
+.galaxy-panel-slider input[type='range'] {
+	flex: 1;
+	min-width: 0;
+	height: 14px;
+	accent-color: #7f9bff;
+	background: transparent;
+}
+
+.galaxy-panel-value {
+	flex: 0 0 44px;
+	text-align: right;
+	font-family: var(--font-monospace);
+	font-size: 11px;
+	color: #aeb8d0;
+}
+
+.galaxy-panel-row {
 	display: flex;
 	gap: 6px;
+	margin-top: 10px;
 }
 
-.galaxy-hud-row button {
+.galaxy-panel-row button {
+	flex: 1;
 	font-size: 11px;
-	padding: 2px 8px;
+	padding: 3px 8px;
+	background: rgba(255, 255, 255, 0.06);
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	color: #e8ecf6;
+	border-radius: 6px;
+	cursor: pointer;
+	box-shadow: none;
+}
+
+.galaxy-panel-row button:hover {
+	background: rgba(255, 255, 255, 0.12);
+}
+
+.galaxy-panel-dev {
+	margin-top: 10px;
+	border-top: 1px solid rgba(255, 255, 255, 0.08);
+	padding-top: 6px;
+}
+
+.galaxy-panel-dev summary {
+	font-size: 11px;
+	color: #8e99b3;
 	cursor: pointer;
 }

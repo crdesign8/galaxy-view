@@ -7,12 +7,13 @@ attribute float aGhost;
 varying vec3 vColor;
 varying float vGhost;
 uniform float uPixelScale; // drawingBufferHeight / (2·tan(fov/2))
+uniform float uSizeMul; // 控制面板「节点大小」倍率
 
 void main() {
 	vColor = color;
 	vGhost = aGhost;
 	vec4 mv = modelViewMatrix * vec4(position, 1.0);
-	gl_PointSize = aSize * uPixelScale / max(-mv.z, 1.0);
+	gl_PointSize = aSize * uSizeMul * uPixelScale / max(-mv.z, 1.0);
 	gl_Position = projectionMatrix * mv;
 }
 `;

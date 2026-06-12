@@ -20,6 +20,7 @@ export interface GraphData {
 export interface LayoutParams {
 	charge: number; // 负值=斥力
 	linkDistance: number;
+	linkStrength: number; // 倍率：1 = d3 默认（1/min(端点度数)）
 	centerPull: number; // forceX/Y/Z 强度，防孤儿飞逸
 	velocityDecay: number;
 }

@@ -14,5 +14,7 @@ export interface LayoutEngine {
 	isSettled(): boolean;
 	/** 数据增量更新后低温重热 */
 	reheat(alpha?: number): void;
+	/** 实时调参（控制面板滑杆）：更新力参数并重热，星系当场重排 */
+	updateParams(params: LayoutParams): void;
 	dispose(): void;
 }
