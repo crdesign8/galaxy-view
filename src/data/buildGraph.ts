@@ -4,12 +4,14 @@ import type { GraphData, GraphLink, GraphNode } from '../types';
 export interface FileRecord {
 	path: string;
 	basename: string;
+	size?: number; // 字节
 }
 
 export type LinkTable = Record<string, Record<string, number>>;
 
 export interface BuildOptions {
 	includeUnresolved: boolean;
+	includeOrphans: boolean;
 }
 
 function topFolder(path: string): string {
@@ -41,6 +43,7 @@ export function buildGraph(
 			degree: 0,
 			inDegree: 0,
 			outDegree: 0,
+			fileSize: f.size ?? 0,
 			unresolved: false,
 		});
 	}
@@ -89,6 +92,7 @@ export function buildGraph(
 						degree: 0,
 						inDegree: 0,
 						outDegree: 0,
+						fileSize: 0,
 						unresolved: true,
 					});
 				}
@@ -97,5 +101,20 @@ export function buildGraph(
 		}
 	}
 
-	return { nodes, links };
+	if (opts.includeOrphans) return { nodes, links };
+
+	// 过滤孤儿（degree 0）：被过滤节点必然无边，只需重排索引
+	const remap = new Map<number, number>();
+	const kept: GraphNode[] = [];
+	nodes.forEach((n, i) => {
+		if (n.degree > 0) {
+			remap.set(i, kept.length);
+			kept.push(n);
+		}
+	});
+	const remapped: GraphLink[] = links.map((l) => ({
+		source: remap.get(l.source) ?? 0,
+		target: remap.get(l.target) ?? 0,
+	}));
+	return { nodes: kept, links: remapped };
 }

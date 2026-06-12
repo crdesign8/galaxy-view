@@ -12,9 +12,13 @@ export interface PhysicsSettings {
 	flatten: number; // 0=球体，>0=Y 轴压扁 → 银河盘
 }
 
+export type SizeBy = 'degree' | 'fileSize' | 'uniform';
+
 export interface LookSettings {
 	nodeSize: number; // 倍率
 	linkOpacity: number;
+	twinkle: number; // 亮星眨眼频率（0=关）
+	sizeBy: SizeBy; // 节点「质量」依据
 }
 
 export type VisualPreset = 'deep-space' | 'adaptive';
@@ -26,6 +30,8 @@ export interface GalaxySettings {
 	cruise: boolean;
 	cruiseSpeed: number; // 巡航角速度倍率
 	showUnresolved: boolean;
+	showOrphans: boolean;
+	colorTheme: string; // 最近应用的配色主题 id；'imported'=二维导入，'custom'=洗牌后
 	preset: VisualPreset;
 	/** 从 .obsidian/graph.json 一次性导入的 2D 配色（可在面板重新导入） */
 	colorGroups: import('./settings/graphJsonImport').ColorGroup[];
@@ -37,10 +43,12 @@ export interface GalaxySettings {
 export const DEFAULT_SETTINGS: GalaxySettings = {
 	bloom: { strength: 0.35, radius: 0.35, threshold: 0.22 },
 	physics: { repel: 200, linkDistance: 70, linkStrength: 1, centerPull: 0.04, flatten: 0.3 },
-	look: { nodeSize: 1, linkOpacity: 0.14 },
+	look: { nodeSize: 1, linkOpacity: 0.14, twinkle: 0.5, sizeBy: 'degree' },
 	cruise: true,
 	cruiseSpeed: 1,
 	showUnresolved: false,
+	showOrphans: true,
+	colorTheme: 'imported',
 	preset: 'deep-space',
 	colorGroups: [],
 	positionCache: {},
@@ -73,10 +81,22 @@ export function mergeSettings(saved: unknown): GalaxySettings {
 		look: {
 			nodeSize: num(s.look?.['nodeSize'], d.look.nodeSize),
 			linkOpacity: num(s.look?.['linkOpacity'], d.look.linkOpacity),
+			twinkle: num(s.look?.['twinkle'], d.look.twinkle),
+			sizeBy: (['degree', 'fileSize', 'uniform'] as const).includes(s.look?.['sizeBy'] as SizeBy)
+				? (s.look?.['sizeBy'] as SizeBy)
+				: d.look.sizeBy,
 		},
 		cruise: typeof sv.cruise === 'boolean' ? sv.cruise : d.cruise,
 		cruiseSpeed: num((sv as Record<string, unknown>)['cruiseSpeed'], d.cruiseSpeed),
 		showUnresolved: typeof sv.showUnresolved === 'boolean' ? sv.showUnresolved : d.showUnresolved,
+		showOrphans:
+			typeof (sv as Record<string, unknown>)['showOrphans'] === 'boolean'
+				? ((sv as Record<string, unknown>)['showOrphans'] as boolean)
+				: d.showOrphans,
+		colorTheme:
+			typeof (sv as Record<string, unknown>)['colorTheme'] === 'string'
+				? ((sv as Record<string, unknown>)['colorTheme'] as string)
+				: d.colorTheme,
 		preset: sv.preset === 'adaptive' ? 'adaptive' : 'deep-space',
 		colorGroups: Array.isArray(sv.colorGroups)
 			? sv.colorGroups.filter(

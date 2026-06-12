@@ -15,6 +15,7 @@ export class GraphStore extends Component {
 	positions = new Float32Array(0);
 
 	private includeUnresolved = false;
+	private includeOrphans = true;
 	private onChanged: (() => void) | null = null;
 
 	constructor(private app: App) {
@@ -22,8 +23,9 @@ export class GraphStore extends Component {
 	}
 
 	/** dataChanged 在防抖重建完成后触发（调用方负责 reheat + 重建渲染缓冲） */
-	init(includeUnresolved: boolean, onChanged: () => void): void {
+	init(includeUnresolved: boolean, includeOrphans: boolean, onChanged: () => void): void {
 		this.includeUnresolved = includeUnresolved;
+		this.includeOrphans = includeOrphans;
 		this.onChanged = onChanged;
 		const rebuildSoon = debounce(() => this.rebuild(true), 800, true);
 		this.registerEvent(this.app.metadataCache.on('resolved', rebuildSoon));
@@ -48,14 +50,22 @@ export class GraphStore extends Component {
 		return this.includeUnresolved;
 	}
 
+	setIncludeOrphans(v: boolean): void {
+		if (v === this.includeOrphans) return;
+		this.includeOrphans = v;
+		this.rebuild(true);
+	}
+
 	/** preservePositions=false 用于基准（全新确定性种子 → 完整冷布局） */
 	rebuild(preservePositions: boolean): void {
 		const files = this.app.vault.getMarkdownFiles().map((f) => ({
 			path: f.path,
 			basename: f.basename,
+			size: f.stat.size,
 		}));
 		const next = buildGraph(files, this.app.metadataCache.resolvedLinks, this.app.metadataCache.unresolvedLinks, {
 			includeUnresolved: this.includeUnresolved,
+			includeOrphans: this.includeOrphans,
 		});
 
 		const oldIndexById = new Map<string, number>();

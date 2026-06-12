@@ -5,6 +5,7 @@ import type { BenchResult } from '../types';
 import type { GalaxySettings } from '../settings';
 import { DEFAULT_SETTINGS, toLayoutParams } from '../settings';
 import { readGraphColorGroups } from '../settings/graphJsonImport';
+import type { ColorTheme } from '../render/colorThemes';
 import { GraphStore } from '../data/GraphStore';
 import { seedRadius } from '../data/seed';
 import { MainThreadForceLayout } from '../layout/MainThreadForceLayout';
@@ -65,7 +66,7 @@ export class GraphController {
 
 	async start(): Promise<void> {
 		await this.store.ensureCacheReady();
-		this.store.init(this.settings.showUnresolved, () => this.onDataChanged());
+		this.store.init(this.settings.showUnresolved, this.settings.showOrphans, () => this.onDataChanged());
 		this.store.rebuild(false);
 
 		// 暖启动：用上次沉降坐标覆盖种子 → 重开即成形
@@ -84,7 +85,7 @@ export class GraphController {
 
 		this.director = new CameraDirector(renderer.camera, renderer.renderer.domElement, {
 			onFlyToSelected: () => this.flyToSelected(),
-			onResetView: () => this.director?.resetView(this.graphRadius),
+			onResetView: () => this.recenter(),
 		});
 
 		this.overlay = new OverlayManager(this.contentEl, this.app, renderer, {
@@ -186,7 +187,8 @@ export class GraphController {
 			const elev = (10 * Math.PI) / 180;
 			renderer.camera.position.set(inner * Math.cos(elev), inner * Math.sin(elev), inner * 0.2);
 			director.target.set(0, 0, 0);
-			director.resetView(this.graphRadius); // 复用平滑 tween：内部 → 总览
+			director.resetView(this.graphRadius, () => director.beginFocusOrbit(null)); // 内部 → 总览 → 即时巡航
+			renderer.playReveal(2600); // 创世动画：节点从中心波次绽放（G2.5 反馈）
 			this.shot = { t0: performance.now(), durMs: ESTABLISHING_MS, fromBloom: this.settings.bloom.strength * 1.8 };
 		}, 450);
 	}
@@ -219,6 +221,8 @@ export class GraphController {
 		this.renderer?.setBloomParams(s.bloom);
 		this.renderer?.setNodeScale(s.look.nodeSize);
 		this.renderer?.setLinkOpacity(s.look.linkOpacity);
+		this.renderer?.setSizeMode(s.look.sizeBy);
+		if (this.renderer) this.renderer.twinkleFreq = s.look.twinkle;
 		if (this.director) {
 			this.director.cruiseEnabled = s.cruise;
 			this.director.cruiseSpeed = s.cruiseSpeed;
@@ -236,6 +240,42 @@ export class GraphController {
 		this.saveSoon();
 	}
 
+	/** 回中心：清选中 + 平滑回总览 + 到达即绕全局中心巡航 */
+	recenter(): void {
+		this.clearSelection();
+		this.director?.resetView(this.graphRadius, () => this.director?.beginFocusOrbit(null));
+	}
+
+	/** 应用配色主题：按序染给现有颜色组（无组则按节点数从顶层文件夹生成） */
+	applyColorTheme(theme: ColorTheme): void {
+		let groups = this.settings.colorGroups;
+		if (groups.length === 0) {
+			const byFolder = new Map<string, number>();
+			for (const n of this.store.data.nodes) {
+				if (n.folderTop && !n.unresolved) byFolder.set(n.folderTop, (byFolder.get(n.folderTop) ?? 0) + 1);
+			}
+			groups = [...byFolder.entries()]
+				.sort((a, b) => b[1] - a[1])
+				.slice(0, 9)
+				.map(([folder]) => ({ query: `path:${folder}`, color: '#9aa4b2' }));
+			this.settings.colorGroups = groups;
+		}
+		groups.forEach((g, i) => (g.color = theme.colors[i % theme.colors.length] ?? g.color));
+		this.settings.colorTheme = theme.id;
+		this.renderer?.setColorFn(makeNodeColorFn(groups));
+		this.renderer?.recolor();
+		this.saveSoon();
+	}
+
+	/** 手动触发创世动画（坐标未沉降时给提示） */
+	playRevealManually(): void {
+		if (!this.layout.isSettled()) {
+			new Notice('星系还在成形中，沉降后再试');
+			return;
+		}
+		this.renderer?.playReveal();
+	}
+
 	/** 在已导入的颜色组之间洗牌（同组不变，颜色互换） */
 	shuffleColors(): void {
 		const groups = this.settings.colorGroups;
@@ -249,6 +289,7 @@ export class GraphController {
 			[colors[i], colors[j]] = [colors[j]!, colors[i]!];
 		}
 		groups.forEach((g, i) => (g.color = colors[i] ?? g.color));
+		this.settings.colorTheme = 'custom';
 		this.renderer?.setColorFn(makeNodeColorFn(groups));
 		this.renderer?.recolor();
 		this.saveSoon();
@@ -414,6 +455,11 @@ export class GraphController {
 			onLook: () => {
 				this.renderer?.setNodeScale(this.settings.look.nodeSize);
 				this.renderer?.setLinkOpacity(this.settings.look.linkOpacity);
+				if (this.renderer) this.renderer.twinkleFreq = this.settings.look.twinkle;
+				this.saveSoon();
+			},
+			onSizeBy: () => {
+				this.renderer?.setSizeMode(this.settings.look.sizeBy);
 				this.saveSoon();
 			},
 			onCruise: (on) => {
@@ -430,6 +476,13 @@ export class GraphController {
 			},
 			onImportColors: () => void this.importColors(true),
 			onShuffleColors: () => this.shuffleColors(),
+			onColorTheme: (t) => this.applyColorTheme(t),
+			onRecenter: () => this.recenter(),
+			onReveal: () => this.playRevealManually(),
+			onShowOrphans: (on) => {
+				this.store.setIncludeOrphans(on);
+				this.saveSoon();
+			},
 			onStylePreset: (p) => this.applyStylePreset(p),
 			onCruiseSpeed: () => {
 				if (this.director) this.director.cruiseSpeed = this.settings.cruiseSpeed;

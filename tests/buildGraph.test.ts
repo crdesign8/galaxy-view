@@ -10,7 +10,7 @@ const files = [
 
 describe('buildGraph', () => {
 	it('节点：路径为 id，顶层文件夹归组，根目录为空串', () => {
-		const g = buildGraph(files, {}, {}, { includeUnresolved: false });
+		const g = buildGraph(files, {}, {}, { includeUnresolved: false, includeOrphans: true });
 		expect(g.nodes).toHaveLength(4);
 		expect(g.nodes[0]).toMatchObject({ id: '01学习/笔记A.md', folderTop: '01学习', unresolved: false });
 		expect(g.nodes[1]?.folderTop).toBe('01学习');
@@ -23,7 +23,7 @@ describe('buildGraph', () => {
 			'02工作/笔记C.md': { '01学习/笔记A.md': 1 },
 			'幽灵来源.md': { '01学习/笔记A.md': 1 },
 		};
-		const g = buildGraph(files, resolved, {}, { includeUnresolved: false });
+		const g = buildGraph(files, resolved, {}, { includeUnresolved: false, includeOrphans: true });
 		expect(g.links).toEqual([
 			{ source: 0, target: 1 },
 			{ source: 2, target: 0 },
@@ -35,7 +35,7 @@ describe('buildGraph', () => {
 	});
 
 	it('resolvedLinks 同对多次出现（值=次数）只产生一条边', () => {
-		const g = buildGraph(files, { '01学习/笔记A.md': { '02工作/笔记C.md': 99 } }, {}, { includeUnresolved: false });
+		const g = buildGraph(files, { '01学习/笔记A.md': { '02工作/笔记C.md': 99 } }, {}, { includeUnresolved: false, includeOrphans: true });
 		expect(g.links).toHaveLength(1);
 	});
 
@@ -44,11 +44,11 @@ describe('buildGraph', () => {
 			'01学习/笔记A.md': { 概念词典: 2 },
 			'02工作/笔记C.md': { 概念词典: 1, 另一个幽灵: 1 },
 		};
-		const off = buildGraph(files, {}, unresolved, { includeUnresolved: false });
+		const off = buildGraph(files, {}, unresolved, { includeUnresolved: false, includeOrphans: true });
 		expect(off.nodes).toHaveLength(4);
 		expect(off.links).toHaveLength(0);
 
-		const on = buildGraph(files, {}, unresolved, { includeUnresolved: true });
+		const on = buildGraph(files, {}, unresolved, { includeUnresolved: true, includeOrphans: true });
 		const ghosts = on.nodes.filter((n) => n.unresolved);
 		expect(ghosts).toHaveLength(2);
 		expect(ghosts[0]).toMatchObject({ id: 'unresolved:概念词典', folderTop: '__unresolved__' });
@@ -57,8 +57,23 @@ describe('buildGraph', () => {
 	});
 
 	it('空 vault 不炸', () => {
-		const g = buildGraph([], {}, {}, { includeUnresolved: true });
+		const g = buildGraph([], {}, {}, { includeUnresolved: true, includeOrphans: true });
 		expect(g.nodes).toHaveLength(0);
 		expect(g.links).toHaveLength(0);
+	});
+});
+
+describe('孤儿过滤', () => {
+	it('includeOrphans=false 时去掉零度节点并重排边索引', () => {
+		const resolved = { '01学习/笔记A.md': { '02工作/笔记C.md': 1 } };
+		const g = buildGraph(files, resolved, {}, { includeUnresolved: false, includeOrphans: false });
+		expect(g.nodes.map((n) => n.name)).toEqual(['笔记A', '笔记C']);
+		expect(g.links).toEqual([{ source: 0, target: 1 }]);
+	});
+
+	it('fileSize 从 FileRecord.size 透传', () => {
+		const sized = [{ path: 'a.md', basename: 'a', size: 12345 }];
+		const g = buildGraph(sized, {}, {}, { includeUnresolved: false, includeOrphans: true });
+		expect(g.nodes[0]?.fileSize).toBe(12345);
 	});
 });

@@ -5,6 +5,7 @@ export interface GraphNode {
 	degree: number; // 出 + 入
 	inDegree: number;
 	outDegree: number;
+	fileSize: number; // 字节；未解析为 0（「质量」可选依据）
 	unresolved: boolean;
 }
 

@@ -463,3 +463,20 @@
 .gx-section-body {
 	padding-top: 2px;
 }
+
+.gx-theme-select {
+	width: 100%;
+	margin-top: 8px;
+	font-size: 11px;
+	padding: 3px 6px;
+	border-radius: 6px;
+	background: rgba(127, 127, 127, 0.12);
+	border: 1px solid rgba(127, 127, 127, 0.25);
+	color: inherit;
+	cursor: pointer;
+}
+
+.gx-theme-select option {
+	color: var(--text-normal);
+	background: var(--background-primary);
+}

@@ -1,13 +1,5 @@
 import { BufferAttribute, BufferGeometry, Color, Group, Points, PointsMaterial } from 'three';
 
-export function disposeStarfield(group: Group): void {
-	for (const child of group.children) {
-		const p = child as Points<BufferGeometry, PointsMaterial>;
-		p.geometry.dispose();
-		p.material.dispose();
-	}
-}
-
 // 星空：3 个尺寸级 = 3 个 draw call（视觉规格 §1.2）；球壳分布近似无穷远
 const CLASSES = [
 	{ count: 2600, size: 1.2 },
@@ -31,9 +23,63 @@ function mulberry(seed: number): () => number {
 	};
 }
 
-export function buildStarfield(shellRadius: number): Group {
+export function disposeStarfield(group: Group): void {
+	for (const child of group.children) {
+		const p = child as Points<BufferGeometry, PointsMaterial>;
+		p.geometry.dispose();
+		p.material.dispose();
+	}
+}
+
+/**
+ * 亮星眨眼（G2.5 反馈）。品味逻辑：
+ * 只有最大尺寸级的「真星」会眨——背景星不闪；同一时刻最多一颗；
+ * 泊松随机间隔 + 1.6s 正弦包络——像真夜空偶尔的大气闪烁，不是圣诞彩灯。
+ */
+export class Twinkler {
+	private baseColors: Float32Array;
+	private attr: BufferAttribute;
+	private active: { index: number; t: number } | null = null;
+	private nextIn = 3;
+
+	constructor(
+		private geometry: BufferGeometry,
+		private starCount: number,
+	) {
+		this.attr = geometry.getAttribute('color') as BufferAttribute;
+		this.baseColors = new Float32Array(this.attr.array as Float32Array);
+	}
+
+	/** freq：期望每分钟眨眼次数 ÷ 10（滑杆 0–2，0=关） */
+	update(deltaS: number, freq: number): void {
+		if (this.active) {
+			this.active.t += deltaS;
+			const t = this.active.t;
+			const DUR = 1.6;
+			const arr = this.attr.array as Float32Array;
+			const i = this.active.index * 3;
+			const k = t >= DUR ? 1 : 1 + 2.2 * Math.sin((Math.PI * t) / DUR);
+			arr[i] = (this.baseColors[i] ?? 1) * k;
+			arr[i + 1] = (this.baseColors[i + 1] ?? 1) * k;
+			arr[i + 2] = (this.baseColors[i + 2] ?? 1) * k;
+			this.attr.needsUpdate = true;
+			if (t >= DUR) this.active = null;
+			return;
+		}
+		if (freq <= 0.01) return;
+		this.nextIn -= deltaS;
+		if (this.nextIn <= 0) {
+			this.active = { index: Math.floor(Math.random() * this.starCount), t: 0 };
+			// 泊松间隔：均值 6/freq 秒（freq=0.5 → 平均 12s 一次）
+			this.nextIn = Math.min(Math.max(-Math.log(Math.random() + 1e-9) * (6 / freq), 1.5), 90);
+		}
+	}
+}
+
+export function buildStarfield(shellRadius: number): { group: Group; twinkler: Twinkler } {
 	const group = new Group();
 	const rand = mulberry(0x517cc1);
+	let twinkler: Twinkler | null = null;
 	for (const cls of CLASSES) {
 		const pos = new Float32Array(cls.count * 3);
 		const col = new Float32Array(cls.count * 3);
@@ -46,8 +92,7 @@ export function buildStarfield(shellRadius: number): Group {
 			pos[i * 3 + 2] = r * Math.cos(phi);
 
 			const pick = rand();
-			const c =
-				pick < 0.85 ? COOL_A.clone().lerp(COOL_B, rand()) : pick < 0.95 ? WARM.clone() : BLUE.clone();
+			const c = pick < 0.85 ? COOL_A.clone().lerp(COOL_B, rand()) : pick < 0.95 ? WARM.clone() : BLUE.clone();
 			// 大星级里 ~3% 提到 HDR 亮度，独享 bloom —— 仅有的几颗「真星」
 			if (cls.size >= 3.0 && rand() < 0.03) c.multiplyScalar(1.8);
 			col[i * 3] = c.r;
@@ -68,6 +113,7 @@ export function buildStarfield(shellRadius: number): Group {
 		const points = new Points(geo, mat);
 		points.renderOrder = -1; // 星空垫底
 		group.add(points);
+		if (cls.size >= 3.0) twinkler = new Twinkler(geo, cls.count); // 只有「真星」级会眨眼
 	}
-	return group;
+	return { group, twinkler: twinkler ?? new Twinkler(new BufferGeometry().setAttribute('color', new BufferAttribute(new Float32Array(3), 3)), 1) };
 }

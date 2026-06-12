@@ -164,9 +164,9 @@ export class CameraDirector {
 		return new Vector3(d * Math.cos(elev), d * Math.sin(elev), d * 0.35);
 	}
 
-	/** R：平滑回总览 */
-	resetView(graphRadius: number): void {
-		this.startTween(this.framingPosition(graphRadius), new Vector3(0, 0, 0), 1200);
+	/** R/回中心：平滑回总览 */
+	resetView(graphRadius: number, onDone?: () => void): void {
+		this.startTween(this.framingPosition(graphRadius), new Vector3(0, 0, 0), 1200, onDone);
 	}
 
 	/**

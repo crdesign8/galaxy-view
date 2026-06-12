@@ -25,7 +25,7 @@ import { BLOOM_DEFAULTS, NODE_BASE_RADIUS, NODE_MAX_RADIUS, STARFIELD_ROTATION_R
 import { NODE_FRAGMENT_SHADER, NODE_VERTEX_SHADER } from './shaders';
 import { linkColor, fallbackColorFn } from './palette';
 import type { NodeColorFn } from './palette';
-import { buildStarfield, disposeStarfield } from './starfield';
+import { buildStarfield, disposeStarfield, Twinkler } from './starfield';
 import type { VisualTokens } from './presets';
 import { DEEP_SPACE } from './presets';
 
@@ -58,7 +58,11 @@ export class AggregateRenderer {
 	private selMaterial: LineBasicMaterial | null = null;
 	private selLinkIdx: number[] = [];
 	private starfield: Group;
+	private twinkler: Twinkler;
+	twinkleFreq = 0.5;
 	private motes: Points | null = null;
+	private reveal: { t0: number; durMs: number; maxR: number } | null = null;
+	private revealBuf: Float32Array = new Float32Array(0);
 
 	private data: GraphData = { nodes: [], links: [] };
 	private positions: Float32Array = new Float32Array(0);
@@ -89,7 +93,9 @@ export class AggregateRenderer {
 		this.scene.background = new Color(this.tokens.background);
 		this.camera = new PerspectiveCamera(60, 1, 0.5, 50_000);
 
-		this.starfield = buildStarfield(graphRadiusEstimate * 6.5);
+		const sf = buildStarfield(graphRadiusEstimate * 6.5);
+		this.starfield = sf.group;
+		this.twinkler = sf.twinkler;
 		this.scene.add(this.starfield);
 
 		this.composer = new EffectComposer(this.renderer);
@@ -131,7 +137,7 @@ export class AggregateRenderer {
 			const node = data.nodes[i];
 			if (!node) continue;
 			ghost[i] = node.unresolved ? 1 : 0;
-			this.sizes[i] = Math.min(NODE_BASE_RADIUS * (1 + 0.5 * Math.sqrt(node.degree)), NODE_MAX_RADIUS);
+			this.sizes[i] = this.computeSize(node);
 		}
 		this.nodeGeometry = new BufferGeometry();
 		this.nodeGeometry.setAttribute('position', new BufferAttribute(nodePos, 3));
@@ -174,6 +180,97 @@ export class AggregateRenderer {
 		this.recolor();
 		this.updatePositions();
 		this.setSelectedLinks(this.selLinkIdx); // 数据重建后恢复高亮层
+	}
+
+	private sizeMode: 'degree' | 'fileSize' | 'uniform' = 'degree';
+
+	private computeSize(node: import('../types').GraphNode): number {
+		switch (this.sizeMode) {
+			case 'fileSize':
+				// 中位笔记 ~2KB；立方根压缩长尾，巨型文档不吞画面
+				return Math.min(Math.max(NODE_BASE_RADIUS * (0.7 + 1.1 * Math.cbrt(node.fileSize / 4096)), 1.6), NODE_MAX_RADIUS);
+			case 'uniform':
+				return NODE_BASE_RADIUS * 1.3;
+			default:
+				return Math.min(NODE_BASE_RADIUS * (1 + 0.5 * Math.sqrt(node.degree)), NODE_MAX_RADIUS);
+		}
+	}
+
+	setSizeMode(mode: 'degree' | 'fileSize' | 'uniform'): void {
+		this.sizeMode = mode;
+		if (!this.nodeGeometry) return;
+		for (let i = 0; i < this.data.nodes.length; i++) {
+			const node = this.data.nodes[i];
+			if (node) this.sizes[i] = this.computeSize(node);
+		}
+		(this.nodeGeometry.getAttribute('aSize') as BufferAttribute).needsUpdate = true;
+	}
+
+	/**
+	 * 创世动画（G2.5 反馈）：节点从中心按半径波次绽放到沉降坐标。
+	 * 仅在坐标已知（暖启动/已沉降）时调用；链接随节点坐标自然伸展 + 透明度渐入。
+	 */
+	playReveal(durMs = 2600): void {
+		const n = this.data.nodes.length;
+		if (n === 0) return;
+		let maxR = 1;
+		for (let i = 0; i < n; i++) {
+			const r = Math.hypot(this.positions[i * 3] ?? 0, this.positions[i * 3 + 1] ?? 0, this.positions[i * 3 + 2] ?? 0);
+			if (r > maxR) maxR = r;
+		}
+		if (this.revealBuf.length < n * 3) this.revealBuf = new Float32Array(n * 3);
+		this.reveal = { t0: performance.now(), durMs, maxR };
+	}
+
+	private stepReveal(now: number): void {
+		if (!this.reveal || !this.nodeGeometry || !this.linkGeometry) return;
+		const { t0, durMs, maxR } = this.reveal;
+		const p = (now - t0) / durMs;
+		if (p >= 1) {
+			this.reveal = null;
+			this.updatePositions();
+			if (this.linkMaterial) this.linkMaterial.opacity = this.effectiveLinkOpacity();
+			return;
+		}
+		const n = this.data.nodes.length;
+		const buf = this.revealBuf;
+		const pos = this.positions;
+		for (let i = 0; i < n; i++) {
+			const x = pos[i * 3] ?? 0;
+			const y = pos[i * 3 + 1] ?? 0;
+			const z = pos[i * 3 + 2] ?? 0;
+			const delay = (Math.hypot(x, y, z) / maxR) * 0.55; // 内圈先亮，波次向外
+			const local = Math.min(Math.max((p - delay) / 0.45, 0), 1);
+			const k = 1 - Math.pow(1 - local, 3); // easeOutCubic
+			buf[i * 3] = x * k;
+			buf[i * 3 + 1] = y * k;
+			buf[i * 3 + 2] = z * k;
+		}
+		const nodeAttr = this.nodeGeometry.getAttribute('position') as BufferAttribute;
+		(nodeAttr.array as Float32Array).set(buf.subarray(0, n * 3));
+		nodeAttr.needsUpdate = true;
+		const linkAttr = this.linkGeometry.getAttribute('position') as BufferAttribute;
+		const arr = linkAttr.array as Float32Array;
+		const links = this.data.links;
+		for (let li = 0; li < links.length; li++) {
+			const l = links[li];
+			if (!l) continue;
+			const sI = l.source * 3;
+			const tI = l.target * 3;
+			const o = li * 6;
+			arr[o] = buf[sI] ?? 0;
+			arr[o + 1] = buf[sI + 1] ?? 0;
+			arr[o + 2] = buf[sI + 2] ?? 0;
+			arr[o + 3] = buf[tI] ?? 0;
+			arr[o + 4] = buf[tI + 1] ?? 0;
+			arr[o + 5] = buf[tI + 2] ?? 0;
+		}
+		linkAttr.needsUpdate = true;
+		if (this.linkMaterial) this.linkMaterial.opacity = this.effectiveLinkOpacity() * Math.min(p * 1.6, 1);
+	}
+
+	get revealing(): boolean {
+		return this.reveal !== null;
 	}
 
 	/** 配色/视觉方向变化时重算颜色（不动坐标） */
@@ -379,8 +476,10 @@ export class AggregateRenderer {
 
 	render(deltaS: number): void {
 		this.starfield.rotation.y += STARFIELD_ROTATION_RAD_PER_S * deltaS;
+		if (this.starfield.visible) this.twinkler.update(deltaS, this.twinkleFreq);
 		if (this.motes?.visible) this.motes.rotation.y -= STARFIELD_ROTATION_RAD_PER_S * 2 * deltaS;
 		if (this.dimAnimating) this.stepDim(deltaS);
+		if (this.reveal) this.stepReveal(performance.now());
 		this.renderer.info.reset();
 		this.composer.render();
 	}

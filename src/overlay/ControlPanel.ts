@@ -2,6 +2,8 @@ import type { GalaxySettings } from '../settings';
 import { DEFAULT_SETTINGS } from '../settings';
 import type { StylePreset } from '../render/stylePresets';
 import { STYLE_PRESETS } from '../render/stylePresets';
+import type { ColorTheme } from '../render/colorThemes';
+import { COLOR_THEMES } from '../render/colorThemes';
 import { Slider } from './Slider';
 
 export interface ControlPanelCallbacks {
@@ -15,6 +17,11 @@ export interface ControlPanelCallbacks {
 	onShowUnresolved: (on: boolean) => void;
 	onImportColors: () => void;
 	onShuffleColors: () => void;
+	onColorTheme: (t: ColorTheme) => void;
+	onRecenter: () => void;
+	onReveal: () => void;
+	onShowOrphans: (on: boolean) => void;
+	onSizeBy: () => void;
 	onSearch: () => void;
 	onReset: () => void;
 	runScenario: (s: 'S1' | 'S2' | 'S3') => void;
@@ -31,6 +38,8 @@ export class ControlPanel {
 	private cruiseBtn: HTMLButtonElement | null = null;
 	private presetBtn: HTMLButtonElement | null = null;
 	private unresolvedBtn: HTMLButtonElement | null = null;
+	private orphanBtn: HTMLButtonElement | null = null;
+	private sizeByBtn: HTMLButtonElement | null = null;
 	private styleChips: HTMLButtonElement[] = [];
 
 	constructor(
@@ -57,12 +66,17 @@ export class ControlPanel {
 		const row1 = body.createDiv({ cls: 'galaxy-panel-row' });
 		const searchBtn = row1.createEl('button', { text: '搜索' });
 		searchBtn.addEventListener('click', cb.onSearch);
-		this.cruiseBtn = row1.createEl('button', { text: s.cruise ? '巡航：开' : '巡航：关' });
+		const recenterBtn = row1.createEl('button', { text: '回中心' });
+		recenterBtn.addEventListener('click', cb.onRecenter);
+		const row1b = body.createDiv({ cls: 'galaxy-panel-row' });
+		this.cruiseBtn = row1b.createEl('button', { text: s.cruise ? '巡航：开' : '巡航：关' });
 		this.cruiseBtn.addEventListener('click', () => {
 			s.cruise = !s.cruise;
 			this.cruiseBtn?.setText(s.cruise ? '巡航：开' : '巡航：关');
 			cb.onCruise(s.cruise);
 		});
+		const revealBtn = row1b.createEl('button', { text: '创世动画' });
+		revealBtn.addEventListener('click', cb.onReveal);
 
 		const chipRow = body.createDiv({ cls: 'gx-chips' });
 		for (const preset of STYLE_PRESETS) {
@@ -104,12 +118,39 @@ export class ControlPanel {
 		this.sliders.push(
 			new Slider(lookSec, { label: '节点大小', min: 0.3, max: 2.5, step: 0.05, defaultValue: d.look.nodeSize, get: () => s.look.nodeSize, set: (v) => (s.look.nodeSize = v), fmt: (v) => `${v.toFixed(2)}×`, onInput: cb.onLook }),
 			new Slider(lookSec, { label: '链接透明度', min: 0, max: 0.6, step: 0.01, defaultValue: d.look.linkOpacity, get: () => s.look.linkOpacity, set: (v) => (s.look.linkOpacity = v), onInput: cb.onLook }),
+			new Slider(lookSec, { label: '星星眨眼', min: 0, max: 2, step: 0.1, defaultValue: d.look.twinkle, get: () => s.look.twinkle, set: (v) => (s.look.twinkle = v), fmt: (v) => (v < 0.05 ? '关' : `${v.toFixed(1)}`), onInput: cb.onLook }),
 		);
+		const sizeRow = lookSec.createDiv({ cls: 'galaxy-panel-row' });
+		this.sizeByBtn = sizeRow.createEl('button', { text: this.sizeByLabel() });
+		this.sizeByBtn.addEventListener('click', () => {
+			const order: typeof s.look.sizeBy[] = ['degree', 'fileSize', 'uniform'];
+			s.look.sizeBy = order[(order.indexOf(s.look.sizeBy) + 1) % order.length] ?? 'degree';
+			this.sizeByBtn?.setText(this.sizeByLabel());
+			cb.onSizeBy();
+		});
+
+		const themeSel = lookSec.createEl('select', { cls: 'gx-theme-select' });
+		const customOpt = themeSel.createEl('option', { text: '配色主题…', value: '' });
+		customOpt.disabled = true;
+		for (const t of COLOR_THEMES) themeSel.createEl('option', { text: t.name, value: t.id });
+		themeSel.value = COLOR_THEMES.some((t) => t.id === s.colorTheme) ? s.colorTheme : '';
+		if (!themeSel.value) customOpt.selected = true;
+		themeSel.addEventListener('change', () => {
+			const t = COLOR_THEMES.find((x) => x.id === themeSel.value);
+			if (t) cb.onColorTheme(t);
+		});
+
 		const colorRow = lookSec.createDiv({ cls: 'galaxy-panel-row' });
 		const importBtn = colorRow.createEl('button', { text: '导入二维配色' });
-		importBtn.addEventListener('click', cb.onImportColors);
+		importBtn.addEventListener('click', () => {
+			cb.onImportColors();
+			customOpt.selected = true;
+		});
 		const shuffleBtn = colorRow.createEl('button', { text: '配色洗牌' });
-		shuffleBtn.addEventListener('click', cb.onShuffleColors);
+		shuffleBtn.addEventListener('click', () => {
+			cb.onShuffleColors();
+			customOpt.selected = true;
+		});
 		const presetRow = lookSec.createDiv({ cls: 'galaxy-panel-row' });
 		this.presetBtn = presetRow.createEl('button', { text: this.presetLabel() });
 		this.presetBtn.addEventListener('click', () => {
@@ -131,7 +172,14 @@ export class ControlPanel {
 			this.unresolvedBtn?.setText(s.showUnresolved ? '未解析：显示' : '未解析：隐藏');
 			cb.onShowUnresolved(s.showUnresolved);
 		});
-		const resetBtn = advRow.createEl('button', { text: '重置默认' });
+		this.orphanBtn = advRow.createEl('button', { text: s.showOrphans ? '孤儿：显示' : '孤儿：隐藏' });
+		this.orphanBtn.addEventListener('click', () => {
+			s.showOrphans = !s.showOrphans;
+			this.orphanBtn?.setText(s.showOrphans ? '孤儿：显示' : '孤儿：隐藏');
+			cb.onShowOrphans(s.showOrphans);
+		});
+		const advRow2 = advSec.createDiv({ cls: 'galaxy-panel-row' });
+		const resetBtn = advRow2.createEl('button', { text: '重置默认' });
 		resetBtn.addEventListener('click', () => {
 			cb.onReset();
 			this.refreshAll();
@@ -159,6 +207,11 @@ export class ControlPanel {
 		return this.settings.preset === 'deep-space' ? '视觉：深空' : '视觉：随主题';
 	}
 
+	private sizeByLabel(): string {
+		const m = this.settings.look.sizeBy;
+		return m === 'degree' ? '大小：链接数' : m === 'fileSize' ? '大小：文档量' : '大小：一致';
+	}
+
 	private markActiveChip(id: string): void {
 		for (const chip of this.styleChips) chip.toggleClass('is-active', chip.dataset['presetId'] === id);
 	}
@@ -168,6 +221,8 @@ export class ControlPanel {
 		this.cruiseBtn?.setText(this.settings.cruise ? '巡航：开' : '巡航：关');
 		this.presetBtn?.setText(this.presetLabel());
 		this.unresolvedBtn?.setText(this.settings.showUnresolved ? '未解析：显示' : '未解析：隐藏');
+		this.orphanBtn?.setText(this.settings.showOrphans ? '孤儿：显示' : '孤儿：隐藏');
+		this.sizeByBtn?.setText(this.sizeByLabel());
 	}
 
 	setPanelTheme(cls: 'gx-theme-dark' | 'gx-theme-light'): void {
