@@ -10,6 +10,7 @@ export interface PhysicsSettings {
 	linkStrength: number; // 倍率：1 = d3 默认（1/min(端点度数)）
 	centerPull: number;
 	flatten: number; // 0=球体，>0=Y 轴压扁 → 银河盘
+	spiral: number; // 0=无螺旋，>0=螺旋引力
 }
 
 export type SizeBy = 'degree' | 'fileSize' | 'uniform';
@@ -43,7 +44,7 @@ export interface GalaxySettings {
 // 默认 = 「银河」风格预设：扁平星盘 + 克制辉光——新用户第一印象优先（G2 反馈）
 export const DEFAULT_SETTINGS: GalaxySettings = {
 	bloom: { strength: 0.35, radius: 0.35, threshold: 0.22 },
-	physics: { repel: 200, linkDistance: 70, linkStrength: 1, centerPull: 0.04, flatten: 0.3 },
+	physics: { repel: 200, linkDistance: 70, linkStrength: 1, centerPull: 0.04, flatten: 0.5, spiral: 0.25 },
 	look: { nodeSize: 1, linkOpacity: 0.14, twinkle: 0.5, sizeBy: 'degree' },
 	cruise: true,
 	cruiseSpeed: 1,
@@ -79,6 +80,7 @@ export function mergeSettings(saved: unknown): GalaxySettings {
 			linkStrength: num(s.physics?.['linkStrength'], d.physics.linkStrength),
 			centerPull: num(s.physics?.['centerPull'], d.physics.centerPull),
 			flatten: num(s.physics?.['flatten'], d.physics.flatten),
+			spiral: num(s.physics?.['spiral'], d.physics.spiral),
 		},
 		look: {
 			nodeSize: num(s.look?.['nodeSize'], d.look.nodeSize),
@@ -133,5 +135,6 @@ export function toLayoutParams(p: PhysicsSettings): import('./types').LayoutPara
 		centerPull: p.centerPull,
 		flatten: p.flatten,
 		velocityDecay: 0.6,
+		spiral: p.spiral,
 	};
 }

@@ -27,6 +27,7 @@ export interface LayoutParams {
 	centerPull: number; // forceX/Y/Z 强度，防孤儿飞逸
 	flatten: number; // 0=自然球体；>0 在 Y 轴额外加压 → 银河盘（自然引斥力做不出盘，这是必要的额外力）
 	velocityDecay: number;
+	spiral: number; // 0=无螺旋，>0=螺旋星系引力
 }
 
 export interface FrameStats {
