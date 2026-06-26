@@ -97,7 +97,7 @@ export class AggregateRenderer {
 		this.scene.background = new Color(this.tokens.background);
 		this.camera = new PerspectiveCamera(60, 1, 0.5, 50_000);
 
-		const sf = buildStarfield(graphRadiusEstimate * 6.5);
+		const sf = buildStarfield(graphRadiusEstimate * 50.0);
 		this.starfield = sf.group;
 		this.twinkler = sf.twinkler;
 		this.scene.add(this.starfield);
@@ -537,7 +537,7 @@ export class AggregateRenderer {
 		const rotation = this.starfield.rotation.y;
 		disposeStarfield(this.starfield);
 		this.scene.remove(this.starfield);
-		const sf = buildStarfield(this.graphRadiusEstimate * 6.5, tier.starScale);
+		const sf = buildStarfield(this.graphRadiusEstimate * 50.0, tier.starScale);
 		this.starfield = sf.group;
 		this.twinkler = sf.twinkler;
 		this.starfield.visible = visible;
