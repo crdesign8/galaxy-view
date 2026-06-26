@@ -114,7 +114,7 @@ export class ControlPanel {
 			new Slider(phySec, { label: t('panel_physics_distance'), min: 20, max: 200, step: 5, defaultValue: d.physics.linkDistance, get: () => s.physics.linkDistance, set: (v) => (s.physics.linkDistance = v), fmt: (v) => String(Math.round(v)), onInput: cb.onPhysics }),
 			new Slider(phySec, { label: t('panel_physics_strength'), min: 0.1, max: 2, step: 0.1, defaultValue: d.physics.linkStrength, get: () => s.physics.linkStrength, set: (v) => (s.physics.linkStrength = v), fmt: (v) => `${v.toFixed(1)}×`, onInput: cb.onPhysics }),
 			new Slider(phySec, { label: t('panel_physics_pull'), min: 0, max: 0.2, step: 0.005, defaultValue: d.physics.centerPull, get: () => s.physics.centerPull, set: (v) => (s.physics.centerPull = v), fmt: (v) => v.toFixed(3), onInput: cb.onPhysics }),
-			new Slider(phySec, { label: t('panel_physics_flatten'), min: 0, max: 0.8, step: 0.02, defaultValue: d.physics.flatten, get: () => s.physics.flatten, set: (v) => (s.physics.flatten = v), onInput: cb.onPhysics }),
+			new Slider(phySec, { label: t('panel_physics_flatten'), min: 0, max: 1.0, step: 0.02, defaultValue: d.physics.flatten, get: () => s.physics.flatten, set: (v) => (s.physics.flatten = v), onInput: cb.onPhysics }),
 			new Slider(phySec, { label: t('panel_physics_spiral'), min: 0, max: 1.0, step: 0.02, defaultValue: d.physics.spiral, get: () => s.physics.spiral, set: (v) => (s.physics.spiral = v), onInput: cb.onPhysics }),
 		);
 

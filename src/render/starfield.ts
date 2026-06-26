@@ -108,7 +108,7 @@ export function buildStarfield(shellRadius: number, scale = 1): { group: Group; 
 			sizeAttenuation: false,
 			vertexColors: true,
 			transparent: true,
-			opacity: 0.55,
+			opacity: 0.12,
 			depthWrite: false,
 		});
 		const points = new Points(geo, mat);

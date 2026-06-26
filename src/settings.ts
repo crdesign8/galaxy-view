@@ -43,11 +43,11 @@ export interface GalaxySettings {
 
 // 默认 = 「银河」风格预设：扁平星盘 + 克制辉光——新用户第一印象优先（G2 反馈）
 export const DEFAULT_SETTINGS: GalaxySettings = {
-	bloom: { strength: 0.35, radius: 0.35, threshold: 0.22 },
-	physics: { repel: 200, linkDistance: 70, linkStrength: 1, centerPull: 0.04, flatten: 0.5, spiral: 0.25 },
-	look: { nodeSize: 1, linkOpacity: 0.14, twinkle: 0.5, sizeBy: 'degree' },
+	bloom: { strength: 0.5, radius: 0.05, threshold: 0.05 },
+	physics: { repel: 175, linkDistance: 45, linkStrength: 1.3, centerPull: 0.025, flatten: 0.8, spiral: 0.42 },
+	look: { nodeSize: 1.0, linkOpacity: 0.01, twinkle: 0.0, sizeBy: 'degree' },
 	cruise: true,
-	cruiseSpeed: 1,
+	cruiseSpeed: 0.2,
 	showUnresolved: false,
 	showOrphans: true,
 	colorTheme: 'imported',
